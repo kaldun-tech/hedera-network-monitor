@@ -1,0 +1,118 @@
+# Hedera Network Monitor Configuration
+# Copy this file to config.yaml and update with your settings
+
+# Network configuration
+network:
+  # Network to connect to: "mainnet" or "testnet"
+  name: testnet
+
+  # Operator account ID for authentication
+  # Format: "shard.realm.account" (e.g., "0.0.2")
+  operator_id: "0.0.1234"
+
+  # Operator account private key
+  # This is required for authentication with the Hedera network
+  # WARNING: Do NOT commit private keys to version control!
+  # Use environment variables or a secure vault in production
+  operator_key: "YOUR_PRIVATE_KEY_HERE"
+
+# Accounts to monitor
+# List all account IDs you want to monitor for balance changes,
+# transaction activity, and other metrics
+accounts:
+  - id: "0.0.5000"
+    label: "Main Account"
+
+  - id: "0.0.5001"
+    label: "Trading Account"
+
+  - id: "0.0.5002"
+    label: "Service Account"
+
+# Alert configuration
+alerting:
+  # Enable or disable alerting
+  enabled: true
+
+  # Webhook URLs for alert notifications
+  # Supported webhooks: HTTP, Slack, Discord, etc.
+  webhooks:
+    - "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+    - "https://discord.com/api/webhooks/YOUR/WEBHOOK"
+
+  # Alert rules
+  # Define conditions that trigger alerts
+  rules:
+    # Alert if account balance drops below threshold
+    - id: "balance_threshold"
+      name: "Low Account Balance"
+      metric_name: "account_balance"
+      condition: "<"
+      threshold: 1000000000  # 10 HBAR in tinybar
+      severity: "warning"
+
+    # Alert if no transactions for extended period
+    - id: "no_transactions"
+      name: "No Recent Transactions"
+      metric_name: "account_transactions"
+      condition: "decreased"
+      threshold: 0
+      severity: "info"
+
+    # Alert if transaction rate is unusually high
+    - id: "high_tx_rate"
+      name: "High Transaction Rate"
+      metric_name: "transaction_rate"
+      condition: ">"
+      threshold: 100  # Transactions per minute
+      severity: "warning"
+
+    # Alert on network connectivity issues
+    - id: "network_down"
+      name: "Network Unavailable"
+      metric_name: "network_nodes_available"
+      condition: "<"
+      threshold: 10  # Alert if less than 10 nodes available
+      severity: "critical"
+
+# API server configuration
+api:
+  # Port to listen on for HTTP API
+  port: 8080
+
+  # Host to bind to
+  host: "localhost"
+
+  # TODO: Add when implemented
+  # enable_metrics_export: true  # Enable Prometheus metrics endpoint
+  # tls_cert: "/path/to/cert.pem"
+  # tls_key: "/path/to/key.pem"
+
+# Logging configuration
+logging:
+  # Log level: "debug", "info", "warn", "error"
+  level: "info"
+
+  # Log format: "json" or "text"
+  format: "text"
+
+# Collection intervals (in seconds)
+# These control how frequently metrics are collected
+# TODO: Add when implemented
+# collection:
+#   account_metrics: 30      # Check account balances every 30 seconds
+#   network_metrics: 60      # Check network status every 60 seconds
+#   transaction_metrics: 10  # Check transactions every 10 seconds
+
+# Storage configuration
+# TODO: Add when implemented
+# storage:
+#   type: "memory"  # "memory" or "postgres" or "influxdb"
+#   memory:
+#     max_metrics: 10000
+#   postgres:
+#     dsn: "postgresql://user:password@localhost/hmon"
+#     retention_days: 30
+#   influxdb:
+#     url: "http://localhost:8086"
+#     database: "hedera_monitor"
