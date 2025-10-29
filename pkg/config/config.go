@@ -10,11 +10,11 @@ import (
 
 // Config represents the complete configuration for the monitor service
 type Config struct {
-	Network   NetworkConfig
-	Accounts  []collector.AccountConfig
-	Alerting  AlertingConfig
-	API       APIConfig
-	Logging   LoggingConfig
+	Network  NetworkConfig
+	Accounts []collector.AccountConfig
+	Alerting AlertingConfig
+	API      APIConfig
+	Logging  LoggingConfig
 }
 
 // NetworkConfig contains Hedera network configuration
@@ -33,12 +33,12 @@ type AlertingConfig struct {
 
 // AlertRule represents an alert configuration
 type AlertRule struct {
-	ID        string
-	Name      string
+	ID         string
+	Name       string
 	MetricName string
-	Condition string
-	Threshold float64
-	Severity  string
+	Condition  string
+	Threshold  float64
+	Severity   string
 }
 
 // APIConfig contains API server configuration
@@ -90,18 +90,23 @@ func Load(configFile string) (*Config, error) {
 
 // Validate validates the configuration
 func (c *Config) Validate() error {
-	// TODO: Add validation logic
-	// - Network name must be valid
-	// - Port must be valid (1-65535)
-	// - Account IDs must be valid format
-	// - At least one account must be configured for monitoring
-	// - Webhook URLs must be valid
-
+	// Network name must be valid
 	if c.Network.Name != "mainnet" && c.Network.Name != "testnet" {
 		return fmt.Errorf("invalid network name: %s", c.Network.Name)
 	}
 
-	if c.API.Port < 1 || c.API.Port > 65535 {
+	// Account IDs must be valid format. At least one account must be configured for monitoring
+	if c.Accounts == nil || len(c.Accounts) == 0 {
+		return fmt.Errorf("no accounts configured")
+	}
+
+	// Webhook URLs must be valid
+	if c.Alerting.Enabled && len(c.Alerting.Rules) == 0 {
+		return fmt.Errorf("no alerting rules configured")
+	}
+
+	// Port must be in range [1: 65535]
+	if c.API.Port < 1 || 65535 < c.API.Port {
 		return fmt.Errorf("invalid API port: %d", c.API.Port)
 	}
 

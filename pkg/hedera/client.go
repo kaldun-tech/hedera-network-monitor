@@ -3,12 +3,15 @@ package hedera
 import (
 	"fmt"
 	"log"
+	"os"
+
+	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 )
 
 // Client is a wrapper around the Hedera SDK client
 type Client interface {
-	// GetAccountBalance retrieves the balance for a given account
-	GetAccountBalance(accountID string) (uint64, error)
+	// GetAccountBalance retrieves the balance for a given account in tinybar
+	GetAccountBalance(accountID string) (int64, error)
 
 	// GetAccountInfo retrieves detailed information about an account
 	GetAccountInfo(accountID string) (map[string]interface{}, error)
@@ -20,73 +23,112 @@ type Client interface {
 	Close() error
 }
 
-// HederaClient is the implementation of Client
-// TODO: Add *hedera.Client when Hedera SDK is added to go.mod
 type HederaClient struct {
-	network   string
-	accountID string
+	client *hiero.Client
 }
 
 // NewClient creates a new Hedera SDK client wrapper
-func NewClient(network string) Client {
-	// TODO: Implement proper client initialization
-	// This should:
-	// 1. Select appropriate network (testnet/mainnet)
-	// 2. Load operator ID and key from configuration
-	// 3. Handle authentication and TLS setup
-	// 4. Set up connection pooling and timeouts
-	// 5. Add retries and circuit breaker patterns
-
+func NewClient(network string) (Client, error) {
 	log.Printf("Creating Hedera client for network: %s", network)
-
-	// Placeholder implementation
-	return &HederaClient{
-		network: network,
+	client, err := hiero.ClientForName(network)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
+
+	// Get operator credentials from environment
+	operatorID := os.Getenv("OPERATOR_ID")
+	operatorKey := os.Getenv("OPERATOR_KEY")
+
+	// Validate environment variables
+	if operatorID == "" || operatorKey == "" {
+		return nil, fmt.Errorf("OPERATOR_ID and OPERATOR_KEY environment variables required")
+	}
+
+	// Parse credentials
+	operatorAccountID, err := hiero.AccountIDFromString(operatorID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid OPERATOR_ID: %w", err)
+	}
+
+	privateKey, err := hiero.PrivateKeyFromString(operatorKey)
+	if err != nil {
+		return nil, fmt.Errorf("invalid OPERATOR_KEY: %w", err)
+	}
+
+	// Set the client operator ID and key
+	client.SetOperator(operatorAccountID, privateKey)
+
+	return &HederaClient{client: client}, nil
+}
+
+func getAccount(accountID string) (hiero.AccountID, error) {
+	return hiero.AccountIDFromString(accountID)
 }
 
 // GetAccountBalance implements Client interface
-func (hc *HederaClient) GetAccountBalance(accountID string) (uint64, error) {
-	// TODO: Implement actual balance query
-	// Steps:
-	// 1. Parse account ID
-	// 2. Create AccountBalanceQuery
-	// 3. Execute query
-	// 4. Return balance in tinybar
-	// 5. Handle errors (account not found, network issues, etc.)
-
+func (hc *HederaClient) GetAccountBalance(accountID string) (int64, error) {
 	log.Printf("Querying balance for account: %s", accountID)
-	return 0, fmt.Errorf("not implemented")
+	parsedAccount, err := getAccount(accountID)
+	if err != nil {
+		return 0, fmt.Errorf("invalid accountID: %w", err)
+	}
+
+	query := hiero.NewAccountBalanceQuery()
+	query.SetAccountID(parsedAccount)
+
+	balance, err := query.Execute(hc.client)
+	if err != nil {
+		return 0, fmt.Errorf("failed to execute balance query: %w", err)
+	}
+
+	return balance.Hbars.AsTinybar(), nil
 }
 
 // GetAccountInfo implements Client interface
 func (hc *HederaClient) GetAccountInfo(accountID string) (map[string]interface{}, error) {
-	// TODO: Implement actual account info query
-	// Steps:
-	// 1. Parse account ID
-	// 2. Create AccountInfoQuery
-	// 3. Execute query
-	// 4. Convert response to map[string]interface{}
-	// 5. Handle errors
-
 	log.Printf("Querying account info for: %s", accountID)
-	return nil, fmt.Errorf("not implemented")
+	parsedAccount, err := getAccount(accountID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid accountID: %w", err)
+	}
+
+	query := hiero.NewAccountInfoQuery().
+		SetAccountID(parsedAccount)
+	info, err := query.Execute(hc.client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute info query: %w", err)
+	}
+
+	return map[string]interface{}{
+		info.AccountID.String(): info,
+	}, err
 }
 
 // GetNetworkInfo implements Client interface
 func (hc *HederaClient) GetNetworkInfo() (map[string]interface{}, error) {
-	// TODO: Implement network info query
-	// This should retrieve:
 	// 1. List of available nodes
-	// 2. Network status
+	// 2. Address book
+	// TODO: consider what else to retrieve
 	// 3. Current consensus node information
 	// 4. Network fee information
 
-	return nil, fmt.Errorf("not implemented")
+	// Empty map
+	result := make(map[string]interface{})
+
+	result["nodes"] = hc.client.GetNetwork()
+
+	addressBook, err := hiero.NewAddressBookQuery().
+		SetMaxAttempts(5).
+		Execute(hc.client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute address book query: %w", err)
+	}
+	result["addressBook"] = addressBook
+
+	return result, nil
 }
 
 // Close implements Client interface
 func (hc *HederaClient) Close() error {
-	// TODO: Close Hedera client connection when SDK is integrated
-	return nil
+	return hc.client.Close()
 }
