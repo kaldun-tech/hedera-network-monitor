@@ -13,7 +13,7 @@ type Record struct {
 	TransactionID string
 	Timestamp     int64
 	AmountTinyBar int64
-	Type          string
+	Type          TransactionType
 	Status        string
 }
 
@@ -125,26 +125,26 @@ func (hc *HederaClient) GetAccountInfo(accountID string) (*hiero.AccountInfo, er
 	return &info, nil
 }
 
-func getTransactionType(rec *hiero.TransactionRecord) string {
+func getTransactionType(rec *hiero.TransactionRecord) TransactionType {
 	if rec.CallResult != nil {
 		if rec.CallResultIsCreate {
-			return "ContractCreate"
+			return TransactionTypeContractCreate
 		}
-		return "ContractCall"
+		return TransactionTypeContractCall
 	}
 	if len(rec.TokenTransfers) > 0 {
-		return "TokenTransfer"
+		return TransactionTypeTokenTransfer
 	}
 	if len(rec.Transfers) > 0 {
-		return "CryptoTransfer"
+		return TransactionTypeCryptoTransfer
 	}
 	if rec.Receipt.TopicID != nil {
-		return "ConsensusSubmitMessage"
+		return TransactionTypeConsensusSubmitMessage
 	}
 	if rec.Receipt.FileID != nil {
-		return "FileOperation"
+		return TransactionTypeFileOperation
 	}
-	return "Unknown"
+	return TransactionTypeUnknown
 }
 
 func buildRecordStruct(nextRec hiero.TransactionRecord) Record {
@@ -175,16 +175,19 @@ func (hc *HederaClient) GetAccountRecords(accountID string, limit int) ([]Record
 		return nil, fmt.Errorf("invalid accountID: %w", err)
 	}
 
-	query := hiero.NewAccountRecordsQuery()
-	query.SetAccountID(parsedAccount)
+	query := hiero.NewAccountRecordsQuery().
+		SetAccountID(parsedAccount)
 	records, err := query.Execute(hc.client)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving records: %w", err)
 	}
 
-	// Convert hiero records to Record struct slice
-	result := make([]Record, 0, len(records))
-	for _, nextRec := range records {
+	// Convert hiero records to Record struct slice, respecting the limit
+	result := make([]Record, 0, min(len(records), limit))
+	for i, nextRec := range records {
+		if i >= limit {
+			break
+		}
 		nextRes := buildRecordStruct(nextRec)
 		result = append(result, nextRes)
 	}
