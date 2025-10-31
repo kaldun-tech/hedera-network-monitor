@@ -40,9 +40,16 @@ func (nc *NetworkCollector) Collect(ctx context.Context, store storage.Storage, 
 			log.Printf("[%s] Stopping collector", nc.Name())
 			return ctx.Err()
 		case <-ticker.C:
-			// TODO: Implement actual network metrics collection
-			// This should:
+			log.Printf("[%s] Collecting metrics", nc.Name())
+
 			// 1. Query network info (available nodes, versions, etc.)
+			addressBook, err := nc.client.GetNodeAddressBook()
+			if err != nil {
+				log.Printf("[%s] Error getting node address book: %v", nc.Name(), err)
+				continue
+			}
+			_ = addressBook // TODO: Process address book for node metrics
+
 			// 2. Check node availability/health
 			// 3. Monitor transaction success rates
 			// 4. Track network fees

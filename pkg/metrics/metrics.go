@@ -41,14 +41,14 @@ func (ma *MetricAggregator) Min() float64 {
 		return 0
 	}
 
-	min := ma.metrics[0].Value
+	minMetric := ma.metrics[0].Value
 	for _, m := range ma.metrics[1:] {
-		if m.Value < min {
-			min = m.Value
+		if m.Value < minMetric {
+			minMetric = m.Value
 		}
 	}
 
-	return min
+	return minMetric
 }
 
 // Max returns the maximum value
@@ -57,14 +57,14 @@ func (ma *MetricAggregator) Max() float64 {
 		return 0
 	}
 
-	max := ma.metrics[0].Value
+	maxMetric := ma.metrics[0].Value
 	for _, m := range ma.metrics[1:] {
-		if m.Value > max {
-			max = m.Value
+		if maxMetric < m.Value {
+			maxMetric = m.Value
 		}
 	}
 
-	return max
+	return maxMetric
 }
 
 // Count returns the number of metrics
