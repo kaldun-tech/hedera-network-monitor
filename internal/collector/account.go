@@ -28,31 +28,31 @@ type AccountCollector struct {
 	interval time.Duration
 }
 
-const DEFAULT_INTERVAL_SECONDS = 30 * time.Second
+const DefaultInterval = 30 * time.Second
 
 // ParseInterval parses an interval string and returns a time.Duration
 // If the string is empty, invalid, or non-positive, returns the default interval
 func ParseInterval(s string) time.Duration {
 	// Return default if string is empty
 	if s == "" {
-		return DEFAULT_INTERVAL_SECONDS
+		return DefaultInterval
 	}
 
 	// Parse the first numeric value from the string
 	fields := strings.Fields(s)
 	if len(fields) == 0 {
-		return DEFAULT_INTERVAL_SECONDS
+		return DefaultInterval
 	}
 
 	seconds, err := strconv.Atoi(fields[0])
 	if err != nil {
 		log.Printf("Invalid interval format: %q, using default", s)
-		return DEFAULT_INTERVAL_SECONDS
+		return DefaultInterval
 	}
 
 	if seconds <= 0 {
 		log.Printf("Interval must be positive, got %d, using default", seconds)
-		return DEFAULT_INTERVAL_SECONDS
+		return DefaultInterval
 	}
 
 	return time.Duration(seconds) * time.Second
@@ -111,6 +111,8 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 		case <-ticker.C:
 			// Collect metrics for each account
 			for _, accountCfg := range ac.accounts {
+				allMetrics := make([]types.Metric, 0)
+
 				// 1. Query account balance
 				balance, err := ac.client.GetAccountBalance(accountCfg.ID)
 				if err != nil {
@@ -118,7 +120,7 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 					return err
 				}
 
-				accountBalanceMetric := types.Metric{
+				allMetrics = append(allMetrics, types.Metric{
 					Name:      "account_balance",
 					Timestamp: time.Now().Unix(),
 					Value:     float64(balance),
@@ -126,14 +128,7 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 						"account_id": accountCfg.ID,
 						"label":      accountCfg.Label,
 					},
-				}
-				// Store metrics and check against alert rules
-				if err := store.StoreMetric(accountBalanceMetric); err != nil {
-					log.Printf("[%s] Error storing balance metric: %v", ac.Name(), err)
-				}
-				if err := alertMgr.CheckMetric(accountBalanceMetric); err != nil {
-					log.Printf("[%s] Error checking balance alerts: %v", ac.Name(), err)
-				}
+				})
 
 				// 2. Query recent transactions (limit to 50 records per query)
 				accountRecords, err := ac.client.GetAccountRecords(accountCfg.ID, 50)
@@ -145,7 +140,7 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 
 				// 3. Calculate derived metrics from transaction records
 				transactionCount := len(accountRecords)
-				txnCountMetric := types.Metric{
+				allMetrics = append(allMetrics, types.Metric{
 					Name:      "account_transaction_count",
 					Timestamp: time.Now().Unix(),
 					Value:     float64(transactionCount),
@@ -153,25 +148,12 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 						"account_id": accountCfg.ID,
 						"label":      accountCfg.Label,
 					},
-				}
-				if err := store.StoreMetric(txnCountMetric); err != nil {
-					log.Printf("[%s] Error storing transaction count metric: %v", ac.Name(), err)
-				}
-				if err := alertMgr.CheckMetric(txnCountMetric); err != nil {
-					log.Printf("[%s] Error checking transaction count alerts: %v", ac.Name(), err)
-				}
+				})
 
 				// TASK 2 - Transaction type breakdown
 				typeMetrics := ac.buildTransactionTypeMetric(accountRecords,
 					accountCfg.ID, accountCfg.Label)
-				for _, metric := range typeMetrics {
-					if err := store.StoreMetric(metric); err != nil {
-						log.Printf("[%s] Error storing transaction type metric: %v", ac.Name(), err)
-					}
-					if err := alertMgr.CheckMetric(metric); err != nil {
-						log.Printf("[%s] Error checking transaction type alerts: %v", ac.Name(), err)
-					}
-				}
+				allMetrics = append(allMetrics, typeMetrics...)
 
 				// TASK 3 - Volume metrics
 				// Sum the total amount transferred in this interval
@@ -179,8 +161,7 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 				for _, rec := range accountRecords {
 					total += rec.AmountTinyBar
 				}
-				// Store as "account_total_volume" metric in tinybar units
-				volumeMetric := types.Metric{
+				allMetrics = append(allMetrics, types.Metric{
 					Name:      "account_total_volume",
 					Timestamp: time.Now().Unix(),
 					Value:     float64(total),
@@ -188,12 +169,16 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 						"account_id": accountCfg.ID,
 						"label":      accountCfg.Label,
 					},
-				}
-				if err := store.StoreMetric(volumeMetric); err != nil {
-					log.Printf("[%s] Error storing volume metric: %v", ac.Name(), err)
-				}
-				if err := alertMgr.CheckMetric(volumeMetric); err != nil {
-					log.Printf("[%s] Error checking volume alerts: %v", ac.Name(), err)
+				})
+
+				// Store and check all metrics
+				for _, metric := range allMetrics {
+					if err := store.StoreMetric(metric); err != nil {
+						log.Printf("[%s] Error storing metric %s: %v", ac.Name(), metric.Name, err)
+					}
+					if err := alertMgr.CheckMetric(metric); err != nil {
+						log.Printf("[%s] Error checking alerts for %s: %v", ac.Name(), metric.Name, err)
+					}
 				}
 
 				// Bonus idea: track inflows vs outflows separately if possible

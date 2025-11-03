@@ -13,7 +13,7 @@ import (
 // TestParseInterval_EmptyString tests parsing an empty interval string
 func TestParseInterval_EmptyString(t *testing.T) {
 	result := ParseInterval("")
-	expected := DEFAULT_INTERVAL_SECONDS
+	expected := DefaultInterval
 
 	if result != expected {
 		t.Errorf("expected %v, got %v", expected, result)
@@ -43,7 +43,7 @@ func TestParseInterval_ValidIntervalWithText(t *testing.T) {
 // TestParseInterval_InvalidFormat tests parsing with invalid format
 func TestParseInterval_InvalidFormat(t *testing.T) {
 	result := ParseInterval("not a number")
-	expected := DEFAULT_INTERVAL_SECONDS
+	expected := DefaultInterval
 
 	if result != expected {
 		t.Errorf("expected default %v, got %v", expected, result)
@@ -53,7 +53,7 @@ func TestParseInterval_InvalidFormat(t *testing.T) {
 // TestParseInterval_ZeroValue tests parsing with zero value (should use default)
 func TestParseInterval_ZeroValue(t *testing.T) {
 	result := ParseInterval("0")
-	expected := DEFAULT_INTERVAL_SECONDS
+	expected := DefaultInterval
 
 	if result != expected {
 		t.Errorf("expected default %v for zero value, got %v", expected, result)
@@ -63,7 +63,7 @@ func TestParseInterval_ZeroValue(t *testing.T) {
 // TestParseInterval_NegativeValue tests parsing with negative value (should use default)
 func TestParseInterval_NegativeValue(t *testing.T) {
 	result := ParseInterval("-10")
-	expected := DEFAULT_INTERVAL_SECONDS
+	expected := DefaultInterval
 
 	if result != expected {
 		t.Errorf("expected default %v for negative value, got %v", expected, result)
