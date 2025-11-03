@@ -125,28 +125,6 @@ func (hc *HederaClient) GetAccountInfo(accountID string) (*hiero.AccountInfo, er
 	return &info, nil
 }
 
-func getTransactionType(rec *hiero.TransactionRecord) TransactionType {
-	if rec.CallResult != nil {
-		if rec.CallResultIsCreate {
-			return TransactionTypeContractCreate
-		}
-		return TransactionTypeContractCall
-	}
-	if len(rec.TokenTransfers) > 0 {
-		return TransactionTypeTokenTransfer
-	}
-	if len(rec.Transfers) > 0 {
-		return TransactionTypeCryptoTransfer
-	}
-	if rec.Receipt.TopicID != nil {
-		return TransactionTypeConsensusSubmitMessage
-	}
-	if rec.Receipt.FileID != nil {
-		return TransactionTypeFileOperation
-	}
-	return TransactionTypeUnknown
-}
-
 func buildRecordStruct(nextRec hiero.TransactionRecord) Record {
 	// Get amount from transfers as tiny bar
 	var amountTinyBar int64
@@ -161,7 +139,7 @@ func buildRecordStruct(nextRec hiero.TransactionRecord) Record {
 		TransactionID: nextRec.TransactionID.String(),
 		Timestamp:     nextRec.ConsensusTimestamp.Unix(),
 		AmountTinyBar: amountTinyBar,
-		Type:          getTransactionType(&nextRec),
+		Type:          GetTransactionType(&nextRec),
 		Status:        nextRec.Receipt.Status.String(),
 	}
 }

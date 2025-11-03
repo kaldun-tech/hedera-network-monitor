@@ -1,5 +1,7 @@
 package hedera
 
+import hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
+
 // TransactionType represents the different types of Hedera transactions
 type TransactionType string
 
@@ -45,4 +47,27 @@ func (t TransactionType) IsValid() bool {
 	default:
 		return false
 	}
+}
+
+// GetTransactionType determines the transaction type from a Hedera TransactionRecord
+func GetTransactionType(rec *hiero.TransactionRecord) TransactionType {
+	if rec.CallResult != nil {
+		if rec.CallResultIsCreate {
+			return TransactionTypeContractCreate
+		}
+		return TransactionTypeContractCall
+	}
+	if len(rec.TokenTransfers) > 0 {
+		return TransactionTypeTokenTransfer
+	}
+	if len(rec.Transfers) > 0 {
+		return TransactionTypeCryptoTransfer
+	}
+	if rec.Receipt.TopicID != nil {
+		return TransactionTypeConsensusSubmitMessage
+	}
+	if rec.Receipt.FileID != nil {
+		return TransactionTypeFileOperation
+	}
+	return TransactionTypeUnknown
 }
