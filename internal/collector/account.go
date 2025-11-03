@@ -30,7 +30,9 @@ type AccountCollector struct {
 
 const DEFAULT_INTERVAL_SECONDS = 30 * time.Second
 
-func parseInterval(s string) time.Duration {
+// ParseInterval parses an interval string and returns a time.Duration
+// If the string is empty, invalid, or non-positive, returns the default interval
+func ParseInterval(s string) time.Duration {
 	// Return default if string is empty
 	if s == "" {
 		return DEFAULT_INTERVAL_SECONDS
@@ -62,8 +64,36 @@ func NewAccountCollector(client hedera.Client, accounts []AccountConfig) *Accoun
 		BaseCollector: NewBaseCollector("AccountCollector"),
 		client:        client,
 		accounts:      accounts,
-		interval:      parseInterval(os.Getenv("COLLECTOR_INTERVAL")),
+		interval:      ParseInterval(os.Getenv("COLLECTOR_INTERVAL")),
 	}
+}
+
+func (ac *AccountCollector) buildTransactionTypeMetric(accountRecords []hedera.Record,
+	accountID, label string) []types.Metric {
+
+	typeCounts := make(map[hedera.TransactionType]int)
+
+	// Count transactions by type
+	for _, record := range accountRecords {
+		typeCounts[record.Type]++
+	}
+
+	// Build the metrics
+	metrics := make([]types.Metric, 0, len(typeCounts))
+	for txType, count := range typeCounts {
+		nextMetric := types.Metric{
+			Name:      "account_transaction_type_count",
+			Timestamp: time.Now().Unix(),
+			Value:     float64(count),
+			Labels: map[string]string{
+				"account_id":       accountID,
+				"label":            label,
+				"transaction_type": txType.String(),
+			},
+		}
+		metrics = append(metrics, nextMetric)
+	}
+	return metrics
 }
 
 // Collect implements the Collector interface
@@ -97,6 +127,13 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 						"label":      accountCfg.Label,
 					},
 				}
+				// Store metrics and check against alert rules
+				if err := store.StoreMetric(accountBalanceMetric); err != nil {
+					log.Printf("[%s] Error storing balance metric: %v", ac.Name(), err)
+				}
+				if err := alertMgr.CheckMetric(accountBalanceMetric); err != nil {
+					log.Printf("[%s] Error checking balance alerts: %v", ac.Name(), err)
+				}
 
 				// 2. Query recent transactions (limit to 50 records per query)
 				accountRecords, err := ac.client.GetAccountRecords(accountCfg.ID, 50)
@@ -117,12 +154,24 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 						"label":      accountCfg.Label,
 					},
 				}
+				if err := store.StoreMetric(txnCountMetric); err != nil {
+					log.Printf("[%s] Error storing transaction count metric: %v", ac.Name(), err)
+				}
+				if err := alertMgr.CheckMetric(txnCountMetric); err != nil {
+					log.Printf("[%s] Error checking transaction count alerts: %v", ac.Name(), err)
+				}
 
-				// TODO: TASK 2 - Transaction type breakdown
-				// Count transactions by type: CryptoTransfer, TokenTransfer, ContractCall, etc.
-				// Iterate: for _, rec := range accountRecords { /* count by rec.Type */ }
-				// Store each type as a separate metric with label "transaction_type": "TypeName"
-				// Helps identify which types of transactions are most active
+				// TASK 2 - Transaction type breakdown
+				typeMetrics := ac.buildTransactionTypeMetric(accountRecords,
+					accountCfg.ID, accountCfg.Label)
+				for _, metric := range typeMetrics {
+					if err := store.StoreMetric(metric); err != nil {
+						log.Printf("[%s] Error storing transaction type metric: %v", ac.Name(), err)
+					}
+					if err := alertMgr.CheckMetric(metric); err != nil {
+						log.Printf("[%s] Error checking transaction type alerts: %v", ac.Name(), err)
+					}
+				}
 
 				// TASK 3 - Volume metrics
 				// Sum the total amount transferred in this interval
@@ -140,33 +189,14 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 						"label":      accountCfg.Label,
 					},
 				}
-				// Bonus idea: track inflows vs outflows separately if possible
-
-				// 4. Store metrics to storage
-				if err := store.StoreMetric(accountBalanceMetric); err != nil {
-					log.Printf("[%s] Error storing balance metric: %v", ac.Name(), err)
-				}
-
-				if err := store.StoreMetric(txnCountMetric); err != nil {
-					log.Printf("[%s] Error storing transaction count metric: %v", ac.Name(), err)
-				}
-
 				if err := store.StoreMetric(volumeMetric); err != nil {
 					log.Printf("[%s] Error storing volume metric: %v", ac.Name(), err)
 				}
-
-				// 5. Check metrics against alert rules
-				if err := alertMgr.CheckMetric(accountBalanceMetric); err != nil {
-					log.Printf("[%s] Error checking balance alerts: %v", ac.Name(), err)
-				}
-
-				if err := alertMgr.CheckMetric(txnCountMetric); err != nil {
-					log.Printf("[%s] Error checking transaction count alerts: %v", ac.Name(), err)
-				}
-
 				if err := alertMgr.CheckMetric(volumeMetric); err != nil {
 					log.Printf("[%s] Error checking volume alerts: %v", ac.Name(), err)
 				}
+
+				// Bonus idea: track inflows vs outflows separately if possible
 			}
 		}
 	}
