@@ -120,64 +120,48 @@ func (s *Server) Start(ctx context.Context) error {
 // No query parameters required
 // Returns: HealthResponse with status and version
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	// IMPLEMENTATION:
-	// 1. Check if request method is GET (done below)
-	// 2. Create HealthResponse struct
-	// 3. Call s.writeJSON() with 200 status and response
-	// 4. That's it! No storage access needed.
-
+	// Check if request method is GET
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, "only GET allowed")
 		return
 	}
 
+	// Create HealthResponse struct and call s.writeJSON() with 200 status and response
 	s.writeJSON(w, http.StatusOK, HealthResponse{
 		Status:  "healthy",
 		Version: "0.1.0",
 	})
 }
 
+const DefaultLimit = 100
+const MaxLimit = 10000
+
 // handleMetrics returns metrics based on query parameters
 // GET /api/v1/metrics
 // Query parameters:
 //   - name: metric name filter (optional, empty string = all)
 //   - limit: maximum number of results (optional, default 100, max 10000)
+//
 // Returns: MetricsResponse with metrics slice and count
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	// IMPLEMENTATION STEPS:
-	// 1. Check method is GET
-	// 2. Parse query parameters:
-	//    - Get "name" param with r.URL.Query().Get("name")
-	//    - Get "limit" param with r.URL.Query().Get("limit")
-	// 3. Parse limit as integer:
-	//    - If empty or invalid, use default of 100
-	//    - If > 10000, cap at 10000 (prevent abuse)
-	// 4. Call s.store.GetMetrics(name, limit)
-	// 5. Handle error case: log and return 500 with error message
-	// 6. Handle nil metrics: convert to empty slice for JSON
-	// 7. Create MetricsResponse with metrics slice and len(metrics)
-	// 8. Call s.writeJSON() with 200 status and response
-
+	// Check method is GET
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, "only GET allowed")
 		return
 	}
 
-	// Parse query parameters
+	// Parse query parameters:
 	name := r.URL.Query().Get("name")
 	limitStr := r.URL.Query().Get("limit")
 
-	// Parse limit with sensible defaults
-	limit := 100
-	if limitStr != "" {
-		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
-
-	// Cap limit to prevent abuse
-	if limit > 10000 {
-		limit = 10000
+	// Parse limit as integer
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 0 {
+		log.Printf("Invalid limit, using default %d", DefaultLimit)
+		limit = DefaultLimit
+	} else if MaxLimit < limit {
+		log.Printf("Limit too high, using max %d", MaxLimit)
+		limit = MaxLimit
 	}
 
 	// Query storage
@@ -193,6 +177,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		metrics = []types.Metric{}
 	}
 
+	// Create MetricsResponse with 200 status, metrics slice and len(metrics)
 	s.writeJSON(w, http.StatusOK, MetricsResponse{
 		Metrics: metrics,
 		Count:   len(metrics),
@@ -204,17 +189,10 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 // Query parameters:
 //   - key: label key (required, e.g. "account_id")
 //   - value: label value (required, e.g. "0.0.5000")
+//
 // Returns: MetricsResponse with filtered metrics
 func (s *Server) handleMetricsByLabel(w http.ResponseWriter, r *http.Request) {
-	// IMPLEMENTATION STEPS:
-	// 1. Check method is GET
-	// 2. Extract key and value from query params
-	// 3. Validate both are present (return 400 if not)
-	// 4. Call s.store.GetMetricsByLabel(key, value)
-	// 5. Handle error case: log and return 500
-	// 6. Handle nil metrics: convert to empty slice
-	// 7. Create MetricsResponse and call s.writeJSON()
-
+	// Check method is GET
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, "only GET allowed")
 		return
@@ -238,11 +216,12 @@ func (s *Server) handleMetricsByLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle nil case
+	// Handle nil case by converting to empty slice
 	if metrics == nil {
 		metrics = []types.Metric{}
 	}
 
+	// Create MetricsResponse and write JSON
 	s.writeJSON(w, http.StatusOK, MetricsResponse{
 		Metrics: metrics,
 		Count:   len(metrics),
@@ -254,16 +233,7 @@ func (s *Server) handleMetricsByLabel(w http.ResponseWriter, r *http.Request) {
 // No query parameters
 // Returns: StatsResponse with metric count, max size, and utilization percentage
 func (s *Server) handleStorageStats(w http.ResponseWriter, r *http.Request) {
-	// IMPLEMENTATION STEPS:
-	// 1. Check method is GET
-	// 2. Type assert s.store to check if it has Stats() method
-	//    Example: statsProvider, ok := s.store.(interface { Stats() (map[string]interface{}, error) })
-	// 3. If not supported, return 501 NotImplemented
-	// 4. Call statsProvider.Stats()
-	// 5. Handle error: log and return 500
-	// 6. Create StatsResponse from returned map (may need type conversion)
-	// 7. Call s.writeJSON() with response
-
+	// Check method is GET
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, "only GET allowed")
 		return
@@ -274,6 +244,7 @@ func (s *Server) handleStorageStats(w http.ResponseWriter, r *http.Request) {
 		Stats() (map[string]interface{}, error)
 	})
 
+	// If not supported, return 501 NotImplemented
 	if !ok {
 		s.writeError(w, http.StatusNotImplemented, "storage backend does not support stats")
 		return
@@ -287,5 +258,16 @@ func (s *Server) handleStorageStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, stats)
+	// Create StatsResponse from returned map
+	metricCount := stats["metric_count"].(int)
+	maxSize := stats["max_size"].(int)
+	utilization := stats["utilization"].(string)
+
+	response := StatsResponse{
+		MetricCount: metricCount,
+		MaxSize:     maxSize,
+		Utilization: utilization,
+	}
+
+	s.writeJSON(w, http.StatusOK, response)
 }
