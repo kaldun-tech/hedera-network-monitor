@@ -2,6 +2,10 @@ package storage
 
 import (
 	"fmt"
+	"log"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
@@ -16,11 +20,33 @@ type MemoryStorage struct {
 	maxSize int // Maximum number of metrics to keep in memory
 }
 
+const DefaultMaxSize = 10000
+
+func parseMaxSize(s string) (maxSize int) {
+	// Return default if string is empty
+	if s == "" {
+		return DefaultMaxSize
+	}
+
+	// Parse the first numeric value from the string
+	fields := strings.Fields(s)
+	if len(fields) == 0 {
+		return DefaultMaxSize
+	}
+
+	maxSize, err := strconv.Atoi(fields[0])
+	if err != nil {
+		log.Printf("Invalid interval format: %q, using default", s)
+		return DefaultMaxSize
+	}
+	return maxSize
+}
+
 // NewMemoryStorage creates a new in-memory storage
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
 		metrics: make([]types.Metric, 0, 10000),
-		maxSize: 10000, // TODO: Make configurable
+		maxSize: parseMaxSize(os.Getenv("COLLECTOR_MEMORY_MAX_SIZE")),
 	}
 }
 
