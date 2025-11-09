@@ -8,6 +8,9 @@ import (
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 )
 
+// TinybarPerHbar is the conversion constant: 1 HBAR = 100,000,000 tinybar
+const TinybarPerHbar = 100_000_000
+
 // Record represents a transaction record for an account
 type Record struct {
 	TransactionID string
