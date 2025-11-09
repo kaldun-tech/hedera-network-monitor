@@ -11,21 +11,23 @@ import (
 
 // Manager handles alert rules and sending notifications
 type Manager struct {
-	rules      []AlertRule
-	webhooks   []string // Webhook URLs for notifications
-	alertQueue chan AlertEvent
-	ruleMutex  sync.RWMutex
-	lastAlerts map[string]time.Time // Track when we last alerted on each rule to avoid spam
-	alertMutex sync.Mutex
+	rules          []AlertRule
+	webhooks       []string // Webhook URLs for notifications
+	alertQueue     chan AlertEvent
+	ruleMutex      sync.RWMutex
+	lastAlerts     map[string]time.Time // Track when we last alerted on each rule to avoid spam
+	alertMutex     sync.Mutex
+	webhookConfig  WebhookConfig
 }
 
 // NewManager creates a new alert manager
 func NewManager(webhooks []string) *Manager {
 	return &Manager{
-		rules:      make([]AlertRule, 0),
-		webhooks:   webhooks,
-		alertQueue: make(chan AlertEvent, 100), // TODO: Make buffer size configurable
-		lastAlerts: make(map[string]time.Time),
+		rules:          make([]AlertRule, 0),
+		webhooks:       webhooks,
+		alertQueue:     make(chan AlertEvent, 100), // TODO: Make buffer size configurable
+		lastAlerts:     make(map[string]time.Time),
+		webhookConfig:  DefaultWebhookConfig(),
 	}
 }
 
@@ -155,10 +157,20 @@ func (m *Manager) Run(ctx context.Context) error {
 }
 
 // sendWebhook sends an alert to a webhook URL
-// TODO: Implement actual webhook sending with HTTP POST
+// Uses HTTP POST with retry logic and exponential backoff
 func (m *Manager) sendWebhook(webhookURL string, alert AlertEvent) {
-	log.Printf("[AlertManager] Sending webhook to %s for alert %s", webhookURL, alert.RuleID)
-	// TODO: Implement HTTP POST to webhook URL with alert data
-	// TODO: Add retry logic with exponential backoff
-	// TODO: Add timeout and error handling
+	payload := WebhookPayload{
+		RuleID:    alert.RuleID,
+		RuleName:  alert.RuleName,
+		Severity:  alert.Severity,
+		Message:   alert.Message,
+		Value:     alert.Value,
+		Timestamp: alert.Timestamp,
+	}
+
+	err := SendWebhookRequest(webhookURL, payload, m.webhookConfig)
+	if err != nil {
+		log.Printf("[AlertManager] Failed to send webhook to %s for alert %s: %v",
+			webhookURL, alert.RuleID, err)
+	}
 }
