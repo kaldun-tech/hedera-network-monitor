@@ -5,16 +5,18 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
 )
 
 // Manager handles alert rules and sending notifications
 type Manager struct {
-	rules       []AlertRule
-	webhooks    []string // Webhook URLs for notifications
-	alertQueue  chan AlertEvent
-	ruleMutex   sync.RWMutex
-	lastAlerts  map[string]time.Time // Track when we last alerted on each rule to avoid spam
-	alertMutex  sync.Mutex
+	rules      []AlertRule
+	webhooks   []string // Webhook URLs for notifications
+	alertQueue chan AlertEvent
+	ruleMutex  sync.RWMutex
+	lastAlerts map[string]time.Time // Track when we last alerted on each rule to avoid spam
+	alertMutex sync.Mutex
 }
 
 // NewManager creates a new alert manager
@@ -63,13 +65,9 @@ func (m *Manager) GetRules() []AlertRule {
 	return rules
 }
 
-// Metric represents a metric data point (interface-based to avoid circular import)
-type Metric interface{}
-
 // CheckMetric evaluates a metric against all active rules
 // If a rule condition is met, an alert is queued for sending
-// TODO: Update to use actual collector.Metric type once import cycle is resolved
-func (m *Manager) CheckMetric(metric interface{}) error {
+func (m *Manager) CheckMetric(metric types.Metric) error {
 	m.ruleMutex.RLock()
 	rules := m.GetRules()
 	m.ruleMutex.RUnlock()

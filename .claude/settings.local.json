@@ -10,7 +10,8 @@
       "Bash(go test:*)",
       "WebFetch(domain:pkg.go.dev)",
       "Bash(go env:*)",
-      "Read(//home/kaldun/go/pkg/mod/**)"
+      "Read(//home/kaldun/go/pkg/mod/**)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
