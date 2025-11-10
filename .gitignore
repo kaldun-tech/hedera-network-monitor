@@ -27,7 +27,8 @@ go.work.sum
 .env
 .env.local
 .env.*.local
-config.yaml
+config/config.yaml
+!config/config.example.yaml
 
 # IDE and Editor settings
 .idea/
