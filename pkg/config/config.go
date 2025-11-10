@@ -30,6 +30,7 @@ type AlertingConfig struct {
 	Webhooks        []string // Webhook URLs for notifications
 	Rules           []AlertRule
 	CooldownSeconds int // Default cooldown for all rules (seconds)
+	QueueBufferSize int // Alert queue buffer size (default: 100)
 }
 
 // AlertRule represents an alert configuration
@@ -68,6 +69,7 @@ func Load(configFile string) (*Config, error) {
 	viper.SetDefault("logging.format", "text")
 	viper.SetDefault("alerting.enabled", true)
 	viper.SetDefault("alerting.cooldown_seconds", 300)
+	viper.SetDefault("alerting.queue_buffer_size", 100)
 
 	// Read configuration file
 	if err := viper.ReadInConfig(); err != nil {
@@ -108,8 +110,14 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("no alerting rules configured")
 	}
 
-	if c.Alerting.Enabled && c.Alerting.CooldownSeconds < 0 {
+	// Alerting cooldown seconds must be positive
+	if c.Alerting.Enabled && c.Alerting.CooldownSeconds <= 0 {
 		return fmt.Errorf("invalid cooldown seconds: %d", c.Alerting.CooldownSeconds)
+	}
+
+	// Alerting queue buffer size must be positive
+	if c.Alerting.Enabled && c.Alerting.QueueBufferSize <= 0 {
+		return fmt.Errorf("invalid alert queue buffer size: %d", c.Alerting.QueueBufferSize)
 	}
 
 	// Port must be in range [1: 65535]
@@ -132,6 +140,7 @@ func getDefaultConfig() *Config {
 			Webhooks:        make([]string, 0),
 			Rules:           make([]AlertRule, 0),
 			CooldownSeconds: 300,
+			QueueBufferSize: 100,
 		},
 		API: APIConfig{
 			Port: 8080,

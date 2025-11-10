@@ -28,7 +28,7 @@ func NewManager(config config.AlertingConfig) *Manager {
 	return &Manager{
 		rules:           make([]AlertRule, 0),
 		webhooks:        config.Webhooks,
-		alertQueue:      make(chan AlertEvent, 100), // TODO: Make buffer size configurable
+		alertQueue:      make(chan AlertEvent, config.QueueBufferSize),
 		lastAlerts:      make(map[string]time.Time),
 		webhookConfig:   DefaultWebhookConfig(),
 		defaultCooldown: config.CooldownSeconds,

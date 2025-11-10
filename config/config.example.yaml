@@ -35,6 +35,7 @@ alerting:
   enabled: true
   # Cooldown between alerting on a rule, can be over-written per rule
   cooldown_seconds: 300  # 5 minutes
+  queue_buffer_size: 100 # Alert queue buffer size
 
   # Webhook URLs for alert notifications
   # Supported webhooks: HTTP, Slack, Discord, etc.
