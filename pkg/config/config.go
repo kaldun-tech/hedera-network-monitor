@@ -26,19 +26,21 @@ type NetworkConfig struct {
 
 // AlertingConfig contains alert configuration
 type AlertingConfig struct {
-	Enabled  bool
-	Webhooks []string // Webhook URLs for notifications
-	Rules    []AlertRule
+	Enabled         bool
+	Webhooks        []string // Webhook URLs for notifications
+	Rules           []AlertRule
+	CooldownSeconds int // Default cooldown for all rules (seconds)
 }
 
 // AlertRule represents an alert configuration
 type AlertRule struct {
-	ID         string
-	Name       string
-	MetricName string
-	Condition  string
-	Threshold  float64
-	Severity   string
+	ID              string
+	Name            string
+	MetricName      string
+	Condition       string
+	Threshold       float64
+	Severity        string
+	CooldownSeconds int // Optional: override default cooldown (0 = use AlertingConfig default)
 }
 
 // APIConfig contains API server configuration
@@ -65,6 +67,7 @@ func Load(configFile string) (*Config, error) {
 	viper.SetDefault("logging.level", "info")
 	viper.SetDefault("logging.format", "text")
 	viper.SetDefault("alerting.enabled", true)
+	viper.SetDefault("alerting.cooldown_seconds", 300)
 
 	// Read configuration file
 	if err := viper.ReadInConfig(); err != nil {
@@ -105,6 +108,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("no alerting rules configured")
 	}
 
+	if c.Alerting.Enabled && c.Alerting.CooldownSeconds < 0 {
+		return fmt.Errorf("invalid cooldown seconds: %d", c.Alerting.CooldownSeconds)
+	}
+
 	// Port must be in range [1: 65535]
 	if c.API.Port < 1 || 65535 < c.API.Port {
 		return fmt.Errorf("invalid API port: %d", c.API.Port)
@@ -121,9 +128,10 @@ func getDefaultConfig() *Config {
 		},
 		Accounts: make([]collector.AccountConfig, 0),
 		Alerting: AlertingConfig{
-			Enabled:  true,
-			Webhooks: make([]string, 0),
-			Rules:    make([]AlertRule, 0),
+			Enabled:         true,
+			Webhooks:        make([]string, 0),
+			Rules:           make([]AlertRule, 0),
+			CooldownSeconds: 300,
 		},
 		API: APIConfig{
 			Port: 8080,

@@ -2,32 +2,36 @@ package alerting
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
+	"github.com/kaldun-tech/hedera-network-monitor/pkg/config"
 )
 
 // Manager handles alert rules and sending notifications
 type Manager struct {
-	rules          []AlertRule
-	webhooks       []string // Webhook URLs for notifications
-	alertQueue     chan AlertEvent
-	ruleMutex      sync.RWMutex
-	lastAlerts     map[string]time.Time // Track when we last alerted on each rule to avoid spam
-	alertMutex     sync.Mutex
-	webhookConfig  WebhookConfig
+	rules           []AlertRule
+	webhooks        []string // Webhook URLs for notifications
+	alertQueue      chan AlertEvent
+	ruleMutex       sync.RWMutex
+	lastAlerts      map[string]time.Time // Track when we last alerted on each rule to avoid spam
+	alertMutex      sync.Mutex
+	webhookConfig   WebhookConfig
+	defaultCooldown int
 }
 
 // NewManager creates a new alert manager
-func NewManager(webhooks []string) *Manager {
+func NewManager(config config.AlertingConfig) *Manager {
 	return &Manager{
-		rules:          make([]AlertRule, 0),
-		webhooks:       webhooks,
-		alertQueue:     make(chan AlertEvent, 100), // TODO: Make buffer size configurable
-		lastAlerts:     make(map[string]time.Time),
-		webhookConfig:  DefaultWebhookConfig(),
+		rules:           make([]AlertRule, 0),
+		webhooks:        config.Webhooks,
+		alertQueue:      make(chan AlertEvent, 100), // TODO: Make buffer size configurable
+		lastAlerts:      make(map[string]time.Time),
+		webhookConfig:   DefaultWebhookConfig(),
+		defaultCooldown: config.CooldownSeconds,
 	}
 }
 
@@ -79,22 +83,10 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 			continue
 		}
 
-		// TODO: Implement condition evaluation with actual metric
-		// This is a placeholder - once import cycle is resolved, use collector.Metric
-		// For now, just log that we would evaluate
-		log.Printf("[AlertManager] Would evaluate metric against rule: %s", rule.ID)
+		log.Printf("[AlertManager] Evaluating metric against rule: %s", rule.ID)
 
-		// TODO: Implement actual metric value extraction and comparison
-		// Example: simple threshold check
-		shouldAlert := false
-		// switch rule.Condition {
-		// case ">":
-		//     shouldAlert = metric.Value > rule.Threshold
-		// case "<":
-		//     shouldAlert = metric.Value < rule.Threshold
-		// case "==":
-		//     shouldAlert = metric.Value == rule.Threshold
-		// }
+		// Extract and compare to actual metric value
+		shouldAlert := rule.EvaluateCondition(metric.Value)
 
 		if shouldAlert {
 			// Check if we recently alerted on this rule to avoid spam
@@ -102,8 +94,11 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 			lastAlert, exists := m.lastAlerts[rule.ID]
 			m.alertMutex.Unlock()
 
-			// TODO: Make cooldown period configurable
-			cooldown := 5 * time.Minute
+			cooldownSeconds := rule.CooldownSeconds
+			if cooldownSeconds == 0 {
+				cooldownSeconds = m.defaultCooldown
+			}
+			cooldown := time.Duration(cooldownSeconds) * time.Second
 			if exists && time.Since(lastAlert) < cooldown {
 				log.Printf("[AlertManager] Skipping alert for rule %s (cooldown period)", rule.ID)
 				continue
@@ -116,8 +111,12 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 				Severity:  rule.Severity,
 				Message:   rule.Description,
 				Timestamp: time.Now().Unix(),
-				Value:     0.0, // TODO: Extract from metric
+				Value:     metric.Value,
 			}
+
+			// Create a metric ID by concatenating the labels
+			// TODO consider which labels are most important for the metric
+			alert.MetricID = fmt.Sprintf("%s:%v", metric.Name, metric.Labels)
 
 			select {
 			case m.alertQueue <- alert:

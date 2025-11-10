@@ -23,10 +23,10 @@ type WebhookPayload struct {
 
 // WebhookConfig holds configuration for webhook sending
 type WebhookConfig struct {
-	Timeout         time.Duration
-	MaxRetries      int
-	InitialBackoff  time.Duration
-	MaxBackoff      time.Duration
+	Timeout        time.Duration
+	MaxRetries     int
+	InitialBackoff time.Duration
+	MaxBackoff     time.Duration
 }
 
 // DefaultWebhookConfig returns sensible defaults for webhook sending
@@ -79,15 +79,20 @@ func SendWebhookRequest(webhookURL string, payload WebhookPayload, config Webhoo
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			// Read and discard response body to close connection
 			_, _ = io.ReadAll(resp.Body)
-			resp.Body.Close()
 			log.Printf("[AlertManager] Webhook sent successfully to %s (status: %d)", webhookURL, resp.StatusCode)
+			err = resp.Body.Close()
+			if err != nil {
+				lastErr = fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(bodyBytes))
+			}
 			return nil
 		}
 
 		// Non-2xx response
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		lastErr = fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(bodyBytes))
+		err = resp.Body.Close()
+		if err != nil {
+			lastErr = fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(bodyBytes))
+		}
 
 		if attempt < config.MaxRetries {
 			// Retry on non-2xx responses
