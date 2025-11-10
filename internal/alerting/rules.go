@@ -1,5 +1,7 @@
 package alerting
 
+import "fmt"
+
 // AlertRule defines a condition that triggers an alert
 type AlertRule struct {
 	ID              string

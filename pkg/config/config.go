@@ -93,6 +93,51 @@ func Load(configFile string) (*Config, error) {
 	return &config, nil
 }
 
+// Validate checks if the alert rule is valid
+func (r *AlertRule) Validate() error {
+	if r.ID == "" {
+		return fmt.Errorf("rule ID cannot be empty")
+	}
+	if r.Name == "" {
+		return fmt.Errorf("rule name cannot be empty")
+	}
+	if r.MetricName == "" {
+		return fmt.Errorf("rule metric name cannot be empty")
+	}
+
+	// Validate condition is supported
+	validConditions := []string{">", "<", ">=", "<=", "==", "!=", "changed", "increased", "decreased"}
+	isValid := false
+	for _, vc := range validConditions {
+		if r.Condition == vc {
+			isValid = true
+			break
+		}
+	}
+	if !isValid {
+		return fmt.Errorf("invalid condition: %s", r.Condition)
+	}
+
+	// Validate severity
+	validSeverities := []string{"info", "warning", "critical"}
+	isSevere := false
+	for _, vs := range validSeverities {
+		if r.Severity == vs {
+			isSevere = true
+			break
+		}
+	}
+	if !isSevere {
+		return fmt.Errorf("invalid severity: %s", r.Severity)
+	}
+
+	if r.CooldownSeconds < 0 {
+		return fmt.Errorf("cooldown seconds cannot be negative: %d", r.CooldownSeconds)
+	}
+
+	return nil
+}
+
 // Validate validates the configuration
 func (c *Config) Validate() error {
 	// Network name must be valid
@@ -110,6 +155,12 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("no alerting rules configured")
 	}
 
+	// Validate all rules
+	for i, rule := range c.Alerting.Rules {
+		if err := rule.Validate(); err != nil {
+			return fmt.Errorf("invalid rule at index %d: %w", i, err)
+		}
+	}
 	// Alerting cooldown seconds must be positive
 	if c.Alerting.Enabled && c.Alerting.CooldownSeconds <= 0 {
 		return fmt.Errorf("invalid cooldown seconds: %d", c.Alerting.CooldownSeconds)

@@ -40,7 +40,6 @@ func (m *Manager) AddRule(rule AlertRule) error {
 	m.ruleMutex.Lock()
 	defer m.ruleMutex.Unlock()
 
-	// TODO: Validate rule
 	m.rules = append(m.rules, rule)
 	return nil
 }
