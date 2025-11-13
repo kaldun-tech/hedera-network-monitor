@@ -5,12 +5,18 @@ import (
 	"time"
 
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
+	"github.com/kaldun-tech/hedera-network-monitor/pkg/config"
 )
 
 // TestNewManager tests manager initialization
 func TestNewManager(t *testing.T) {
-	webhooks := []string{"https://example.com/webhook"}
-	manager := NewManager(webhooks)
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{"https://example.com/webhook"},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
 
 	if manager == nil {
 		t.Fatal("NewManager returned nil")
@@ -20,14 +26,20 @@ func TestNewManager(t *testing.T) {
 		t.Errorf("Expected 1 webhook, got %d", len(manager.webhooks))
 	}
 
-	if manager.webhooks[0] != webhooks[0] {
-		t.Errorf("Expected webhook %s, got %s", webhooks[0], manager.webhooks[0])
+	if manager.webhooks[0] != "https://example.com/webhook" {
+		t.Errorf("Expected webhook https://example.com/webhook, got %s", manager.webhooks[0])
 	}
 }
 
 // TestAddRule tests adding alert rules
 func TestAddRule(t *testing.T) {
-	manager := NewManager([]string{})
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
 
 	rule := AlertRule{
 		ID:       "test_rule_1",
@@ -56,7 +68,13 @@ func TestAddRule(t *testing.T) {
 
 // TestRemoveRule tests removing alert rules
 func TestRemoveRule(t *testing.T) {
-	manager := NewManager([]string{})
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
 
 	rule1 := AlertRule{ID: "rule1", Name: "Rule 1", Enabled: true}
 	rule2 := AlertRule{ID: "rule2", Name: "Rule 2", Enabled: true}
@@ -87,7 +105,13 @@ func TestRemoveRule(t *testing.T) {
 
 // TestRemoveRuleNotFound tests removing a non-existent rule
 func TestRemoveRuleNotFound(t *testing.T) {
-	manager := NewManager([]string{})
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
 
 	err := manager.RemoveRule("nonexistent")
 	if err != ErrRuleNotFound {
@@ -97,7 +121,13 @@ func TestRemoveRuleNotFound(t *testing.T) {
 
 // TestGetRules tests getting all rules
 func TestGetRules(t *testing.T) {
-	manager := NewManager([]string{})
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
 
 	rule1 := AlertRule{ID: "rule1", Name: "Rule 1", Enabled: true}
 	rule2 := AlertRule{ID: "rule2", Name: "Rule 2", Enabled: false}
@@ -120,7 +150,13 @@ func TestGetRules(t *testing.T) {
 
 // TestCheckMetricThresholdGreaterThan tests condition evaluation with >
 func TestCheckMetricThresholdGreaterThan(t *testing.T) {
-	manager := NewManager([]string{})
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
 
 	rule := AlertRule{
 		ID:        "gt_rule",
@@ -155,7 +191,13 @@ func TestCheckMetricThresholdGreaterThan(t *testing.T) {
 
 // TestCheckMetricThresholdLessThan tests condition evaluation with <
 func TestCheckMetricThresholdLessThan(t *testing.T) {
-	manager := NewManager([]string{})
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
 
 	rule := AlertRule{
 		ID:        "lt_rule",
@@ -183,7 +225,13 @@ func TestCheckMetricThresholdLessThan(t *testing.T) {
 
 // TestCheckMetricThresholdEqual tests condition evaluation with ==
 func TestCheckMetricThresholdEqual(t *testing.T) {
-	manager := NewManager([]string{})
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
 
 	rule := AlertRule{
 		ID:        "eq_rule",
@@ -211,7 +259,13 @@ func TestCheckMetricThresholdEqual(t *testing.T) {
 
 // TestCheckMetricDisabledRule tests that disabled rules are skipped
 func TestCheckMetricDisabledRule(t *testing.T) {
-	manager := NewManager([]string{})
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
 
 	rule := AlertRule{
 		ID:        "disabled_rule",
@@ -247,7 +301,13 @@ func TestCheckMetricDisabledRule(t *testing.T) {
 
 // TestCheckMetricNoMatch tests when metric doesn't match any rule
 func TestCheckMetricNoMatch(t *testing.T) {
-	manager := NewManager([]string{})
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
 
 	rule := AlertRule{
 		ID:        "rule1",
@@ -284,7 +344,13 @@ func TestCheckMetricNoMatch(t *testing.T) {
 // TestCheckMetricCooldown tests that cooldown prevents alert spam
 // NOTE: This test will be fully functional once condition evaluation is implemented
 func TestCheckMetricCooldown(t *testing.T) {
-	manager := NewManager([]string{})
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
 
 	rule := AlertRule{
 		ID:        "spam_rule",

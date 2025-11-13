@@ -8,7 +8,6 @@ import (
 	"time"
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
-	"github.com/kaldun-tech/hedera-network-monitor/internal/alerting"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/storage"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
 	"github.com/kaldun-tech/hedera-network-monitor/pkg/hedera"
@@ -75,7 +74,7 @@ func buildPerNodeMetrics(NodeAddresses []hiero.NodeAddress, networkName string) 
 }
 
 // Collect implements the Collector interface
-func (nc *NetworkCollector) Collect(ctx context.Context, store storage.Storage, alertMgr *alerting.Manager) error {
+func (nc *NetworkCollector) Collect(ctx context.Context, store storage.Storage, alertMgr AlertManager) error {
 	ticker := time.NewTicker(nc.interval)
 	defer ticker.Stop()
 

@@ -33,7 +33,10 @@ func TestSendWebhookRequestSuccess(t *testing.T) {
 
 		// Return success
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status": "ok"}`))
+		_, err := w.Write([]byte(`{"status": "ok"}`))
+		if err != nil {
+			t.Logf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -163,7 +166,10 @@ func TestSendWebhookRequestExhaustedRetries(t *testing.T) {
 		attempts++
 		// Always return error
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte("Service unavailable"))
+		_, err := w.Write([]byte("Service unavailable"))
+		if err != nil {
+			t.Logf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -221,39 +227,39 @@ func TestSendWebhookRequestSuccess201(t *testing.T) {
 // TestCalculateBackoff tests exponential backoff calculation
 func TestCalculateBackoff(t *testing.T) {
 	tests := []struct {
-		name        string
-		attempt     int
-		initial     time.Duration
-		max         time.Duration
-		expected    time.Duration
+		name     string
+		attempt  int
+		initial  time.Duration
+		max      time.Duration
+		expected time.Duration
 	}{
 		{
-			name:        "First attempt",
-			attempt:     0,
-			initial:     1 * time.Second,
-			max:         30 * time.Second,
-			expected:    1 * time.Second,
+			name:     "First attempt",
+			attempt:  0,
+			initial:  1 * time.Second,
+			max:      30 * time.Second,
+			expected: 1 * time.Second,
 		},
 		{
-			name:        "Second attempt",
-			attempt:     1,
-			initial:     1 * time.Second,
-			max:         30 * time.Second,
-			expected:    2 * time.Second,
+			name:     "Second attempt",
+			attempt:  1,
+			initial:  1 * time.Second,
+			max:      30 * time.Second,
+			expected: 2 * time.Second,
 		},
 		{
-			name:        "Third attempt",
-			attempt:     2,
-			initial:     1 * time.Second,
-			max:         30 * time.Second,
-			expected:    4 * time.Second,
+			name:     "Third attempt",
+			attempt:  2,
+			initial:  1 * time.Second,
+			max:      30 * time.Second,
+			expected: 4 * time.Second,
 		},
 		{
-			name:        "Capped at max",
-			attempt:     10,
-			initial:     1 * time.Second,
-			max:         30 * time.Second,
-			expected:    30 * time.Second,
+			name:     "Capped at max",
+			attempt:  10,
+			initial:  1 * time.Second,
+			max:      30 * time.Second,
+			expected: 30 * time.Second,
 		},
 	}
 
@@ -275,15 +281,15 @@ func TestDefaultWebhookConfig(t *testing.T) {
 		t.Errorf("Expected timeout 10s, got %v", config.Timeout)
 	}
 
-	if config.MaxRetries != 3 {
-		t.Errorf("Expected MaxRetries 3, got %d", config.MaxRetries)
+	if config.MaxRetries != 5 {
+		t.Errorf("Expected MaxRetries 5, got %d", config.MaxRetries)
 	}
 
 	if config.InitialBackoff != 1*time.Second {
 		t.Errorf("Expected InitialBackoff 1s, got %v", config.InitialBackoff)
 	}
 
-	if config.MaxBackoff != 30*time.Second {
-		t.Errorf("Expected MaxBackoff 30s, got %v", config.MaxBackoff)
+	if config.MaxBackoff != 32*time.Second {
+		t.Errorf("Expected MaxBackoff 32s, got %v", config.MaxBackoff)
 	}
 }

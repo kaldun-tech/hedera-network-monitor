@@ -33,9 +33,9 @@ type WebhookConfig struct {
 func DefaultWebhookConfig() WebhookConfig {
 	return WebhookConfig{
 		Timeout:        10 * time.Second,
-		MaxRetries:     3,
+		MaxRetries:     5,
 		InitialBackoff: 1 * time.Second,
-		MaxBackoff:     30 * time.Second,
+		MaxBackoff:     32 * time.Second,
 	}
 }
 
@@ -76,13 +76,13 @@ func SendWebhookRequest(webhookURL string, payload WebhookPayload, config Webhoo
 		}
 
 		// Check if response status is success (2xx)
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if 200 <= resp.StatusCode && resp.StatusCode < 300 {
 			// Read and discard response body to close connection
 			_, _ = io.ReadAll(resp.Body)
 			log.Printf("[AlertManager] Webhook sent successfully to %s (status: %d)", webhookURL, resp.StatusCode)
 			err = resp.Body.Close()
 			if err != nil {
-				lastErr = fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(bodyBytes))
+				lastErr = err
 			}
 			return nil
 		}

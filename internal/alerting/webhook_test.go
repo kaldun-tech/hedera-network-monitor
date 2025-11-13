@@ -48,35 +48,35 @@ func TestWebhookPayloadJSON(t *testing.T) {
 	}
 
 	// Unmarshal to verify structure
-	var unmarshaled WebhookPayload
-	err = json.Unmarshal(data, &unmarshaled)
+	var unm WebhookPayload
+	err = json.Unmarshal(data, &unm)
 	if err != nil {
 		t.Fatalf("Failed to unmarshal payload: %v", err)
 	}
 
 	// Verify all fields match
-	if unmarshaled.RuleID != payload.RuleID {
-		t.Errorf("RuleID mismatch: %s != %s", unmarshaled.RuleID, payload.RuleID)
+	if unm.RuleID != payload.RuleID {
+		t.Errorf("RuleID mismatch: %s != %s", unm.RuleID, payload.RuleID)
 	}
 
-	if unmarshaled.RuleName != payload.RuleName {
-		t.Errorf("RuleName mismatch: %s != %s", unmarshaled.RuleName, payload.RuleName)
+	if unm.RuleName != payload.RuleName {
+		t.Errorf("RuleName mismatch: %s != %s", unm.RuleName, payload.RuleName)
 	}
 
-	if unmarshaled.Severity != payload.Severity {
-		t.Errorf("Severity mismatch: %s != %s", unmarshaled.Severity, payload.Severity)
+	if unm.Severity != payload.Severity {
+		t.Errorf("Severity mismatch: %s != %s", unm.Severity, payload.Severity)
 	}
 
-	if unmarshaled.Message != payload.Message {
-		t.Errorf("Message mismatch: %s != %s", unmarshaled.Message, payload.Message)
+	if unm.Message != payload.Message {
+		t.Errorf("Message mismatch: %s != %s", unm.Message, payload.Message)
 	}
 
-	if unmarshaled.Value != payload.Value {
-		t.Errorf("Value mismatch: %f != %f", unmarshaled.Value, payload.Value)
+	if unm.Value != payload.Value {
+		t.Errorf("Value mismatch: %f != %f", unm.Value, payload.Value)
 	}
 
-	if unmarshaled.Timestamp != payload.Timestamp {
-		t.Errorf("Timestamp mismatch: %d != %d", unmarshaled.Timestamp, payload.Timestamp)
+	if unm.Timestamp != payload.Timestamp {
+		t.Errorf("Timestamp mismatch: %d != %d", unm.Timestamp, payload.Timestamp)
 	}
 }
 

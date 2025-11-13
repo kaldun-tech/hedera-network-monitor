@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kaldun-tech/hedera-network-monitor/internal/alerting"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/storage"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
 	"github.com/kaldun-tech/hedera-network-monitor/pkg/hedera"
@@ -97,7 +96,7 @@ func (ac *AccountCollector) buildTransactionTypeMetric(accountRecords []hedera.R
 }
 
 // Collect implements the Collector interface
-func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, alertMgr *alerting.Manager) error {
+func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, alertMgr AlertManager) error {
 	ticker := time.NewTicker(ac.interval)
 	defer ticker.Stop()
 
