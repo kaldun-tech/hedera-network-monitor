@@ -1069,7 +1069,10 @@ func TestHandleCreateAlert_Success(t *testing.T) {
 		Severity:        "warning",
 		CooldownSeconds: 300,
 	}
-	jsonBody, _ := json.Marshal(request)
+	jsonBody, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("failed to marshal request: %v", err)
+	}
 
 	// Make POST request to /api/v1/alerts with JSON body
 	req := httptest.NewRequest("POST", "/api/v1/alerts", bytes.NewReader(jsonBody))
@@ -1101,13 +1104,13 @@ func TestHandleCreateAlert_Success(t *testing.T) {
 		t.Errorf("expected condition '%s', got '%s'", request.Condition, response.Condition)
 	}
 	if response.Threshold != request.Threshold {
-		t.Errorf("expected name '%f', got '%f'", request.Threshold, response.Threshold)
+		t.Errorf("expected threshold '%f', got '%f'", request.Threshold, response.Threshold)
 	}
 	if response.Severity != request.Severity {
-		t.Errorf("expected name '%s', got '%s'", request.Severity, response.Severity)
+		t.Errorf("expected severity '%s', got '%s'", request.Severity, response.Severity)
 	}
 	if response.CooldownSeconds != request.CooldownSeconds {
-		t.Errorf("expected name '%d', got '%d'", request.CooldownSeconds, response.CooldownSeconds)
+		t.Errorf("expected cooldown '%d', got '%d'", request.CooldownSeconds, response.CooldownSeconds)
 	}
 
 	// Verify ID was generated
