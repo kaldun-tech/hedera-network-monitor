@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/kaldun-tech/hedera-network-monitor/internal/alerting"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/storage"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
 )
@@ -40,18 +41,50 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// AlertRuleResponse represents an alert rule in API responses
+type AlertRuleResponse struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	MetricName      string `json:"metric_name"`
+	Condition       string `json:"condition"`
+	Threshold       float64 `json:"threshold"`
+	Severity        string `json:"severity"`
+	Enabled         bool   `json:"enabled"`
+	CooldownSeconds int    `json:"cooldown_seconds"`
+}
+
+// AlertListResponse wraps a list of alert rules
+type AlertListResponse struct {
+	Alerts []AlertRuleResponse `json:"alerts"`
+	Count  int                 `json:"count"`
+}
+
+// CreateAlertRequest represents the payload for creating an alert rule
+type CreateAlertRequest struct {
+	Name            string  `json:"name"`
+	Description     string  `json:"description"`
+	MetricName      string  `json:"metric_name"`
+	Condition       string  `json:"condition"`
+	Threshold       float64 `json:"threshold"`
+	Severity        string  `json:"severity"`
+	CooldownSeconds int     `json:"cooldown_seconds"`
+}
+
 // Server represents the HTTP API server
 type Server struct {
-	port   int
-	store  storage.Storage
-	server *http.Server
+	port         int
+	store        storage.Storage
+	alertManager *alerting.Manager
+	server       *http.Server
 }
 
 // NewServer creates a new API server
-func NewServer(port int, store storage.Storage) *Server {
+func NewServer(port int, store storage.Storage, alertManager *alerting.Manager) *Server {
 	return &Server{
-		port:  port,
-		store: store,
+		port:         port,
+		store:        store,
+		alertManager: alertManager,
 	}
 }
 
@@ -85,10 +118,8 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/api/v1/metrics", s.handleMetrics)
 	mux.HandleFunc("/api/v1/metrics/account", s.handleMetricsByLabel)
 	mux.HandleFunc("/api/v1/storage/stats", s.handleStorageStats)
+	mux.HandleFunc("/api/v1/alerts", s.handleAlerts)
 	// TODO: Add more handlers:
-	// - POST /api/v1/alerts - create alert rule
-	// - GET /api/v1/alerts - list alert rules
-	// - DELETE /api/v1/alerts/{id} - delete alert rule
 	// - WebSocket endpoint for real-time metrics
 
 	s.server = &http.Server{
@@ -270,4 +301,65 @@ func (s *Server) handleStorageStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSON(w, http.StatusOK, response)
+}
+
+// handleAlerts handles alert rule management endpoints
+// Supports:
+//   - GET /api/v1/alerts - List all alert rules
+//   - POST /api/v1/alerts - Create a new alert rule
+//   - DELETE /api/v1/alerts/{id} - Delete an alert rule
+func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleListAlerts(w, r)
+	case http.MethodPost:
+		s.handleCreateAlert(w, r)
+	case http.MethodDelete:
+		s.handleDeleteAlert(w, r)
+	default:
+		s.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// handleListAlerts returns all configured alert rules
+// GET /api/v1/alerts
+// Returns: AlertListResponse with all alert rules
+func (s *Server) handleListAlerts(w http.ResponseWriter, r *http.Request) {
+	// TODO: Implement list alerts
+	// - Get all rules from alertManager using GetRules()
+	// - Convert alerting.AlertRule to AlertRuleResponse
+	// - Return AlertListResponse with count
+	log.Printf("[API] GET /api/v1/alerts - TODO: implement")
+	s.writeError(w, http.StatusNotImplemented, "not implemented")
+}
+
+// handleCreateAlert creates a new alert rule
+// POST /api/v1/alerts
+// Request body: CreateAlertRequest
+// Returns: AlertRuleResponse with created rule
+func (s *Server) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
+	// TODO: Implement create alert
+	// - Parse JSON body into CreateAlertRequest
+	// - Validate required fields (MetricName, Condition, Threshold, Severity)
+	// - Generate unique ID (UUID or sequential)
+	// - Convert to alerting.AlertRule
+	// - Call alertManager.AddRule()
+	// - Return created rule as AlertRuleResponse with 201 status
+	log.Printf("[API] POST /api/v1/alerts - TODO: implement")
+	s.writeError(w, http.StatusNotImplemented, "not implemented")
+}
+
+// handleDeleteAlert deletes an alert rule
+// DELETE /api/v1/alerts/{id}
+// Query parameter: id - the alert rule ID to delete
+// Returns: 204 No Content on success
+func (s *Server) handleDeleteAlert(w http.ResponseWriter, r *http.Request) {
+	// TODO: Implement delete alert
+	// - Extract rule ID from URL query parameter (r.URL.Query().Get("id"))
+	// - Validate ID is not empty
+	// - Call alertManager.RemoveRule(id)
+	// - Handle ErrRuleNotFound (404)
+	// - Return 204 No Content on success
+	log.Printf("[API] DELETE /api/v1/alerts - TODO: implement")
+	s.writeError(w, http.StatusNotImplemented, "not implemented")
 }
