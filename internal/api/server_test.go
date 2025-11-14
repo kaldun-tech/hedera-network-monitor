@@ -7,19 +7,74 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/kaldun-tech/hedera-network-monitor/internal/alerting"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
 )
 
 // MockStorage is a mock implementation of the Storage interface for testing
 type MockStorage struct {
-	metrics         []types.Metric
-	getMetricsErr   error
-	getByLabelErr   error
-	storeMetricErr  error
-	deleteOldErr    error
-	closeErr        error
-	statsErr        error
-	supportsStats   bool
+	metrics        []types.Metric
+	getMetricsErr  error
+	getByLabelErr  error
+	storeMetricErr error
+	deleteOldErr   error
+	closeErr       error
+	statsErr       error
+	supportsStats  bool
+}
+
+// MockAlertManager is a mock implementation of the AlertManager interface for testing
+type MockAlertManager struct {
+	rules           []alerting.AlertRule
+	addRuleErr      error
+	removeRuleErr   error
+	getRulesErr     error
+	addRuleCalls    int                 // Track how many times AddRule was called
+	removeRuleCalls int                 // Track how many times RemoveRule was called
+	getRulesCalls   int                 // Track how many times GetRules was called
+	lastAddedRule   *alerting.AlertRule // Track the last rule that was added
+	lastRemovedID   string              // Track the last rule ID that was removed
+}
+
+// GetRules returns all configured alert rules
+func (m *MockAlertManager) GetRules() []alerting.AlertRule {
+	m.getRulesCalls++
+	if m.getRulesErr != nil {
+		return nil
+	}
+	// Return a copy to prevent external modification
+	rules := make([]alerting.AlertRule, len(m.rules))
+	copy(rules, m.rules)
+	return rules
+}
+
+// AddRule adds a new alert rule
+func (m *MockAlertManager) AddRule(rule alerting.AlertRule) error {
+	m.addRuleCalls++
+	m.lastAddedRule = &rule
+	if m.addRuleErr != nil {
+		return m.addRuleErr
+	}
+	m.rules = append(m.rules, rule)
+	return nil
+}
+
+// RemoveRule removes an alert rule by ID
+func (m *MockAlertManager) RemoveRule(ruleID string) error {
+	m.removeRuleCalls++
+	m.lastRemovedID = ruleID
+	if m.removeRuleErr != nil {
+		return m.removeRuleErr
+	}
+
+	for i, rule := range m.rules {
+		if rule.ID == ruleID {
+			m.rules = append(m.rules[:i], m.rules[i+1:]...)
+			return nil
+		}
+	}
+
+	return alerting.ErrRuleNotFound
 }
 
 func (m *MockStorage) StoreMetric(metric types.Metric) error {
@@ -85,7 +140,8 @@ func (m *MockStorage) Stats() (map[string]interface{}, error) {
 // TestNewServer tests server creation
 func TestNewServer(t *testing.T) {
 	store := &MockStorage{}
-	server := NewServer(8080, store)
+	alertManager := &MockAlertManager{}
+	server := NewServer(8080, store, alertManager)
 
 	if server == nil {
 		t.Fatal("expected server to be created")
@@ -103,7 +159,7 @@ func TestNewServer(t *testing.T) {
 // TestHandleHealth tests the /health endpoint
 func TestHandleHealth_Success(t *testing.T) {
 	store := &MockStorage{}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -131,7 +187,7 @@ func TestHandleHealth_Success(t *testing.T) {
 // TestHandleHealth_MethodNotAllowed tests health endpoint with wrong method
 func TestHandleHealth_MethodNotAllowed(t *testing.T) {
 	store := &MockStorage{}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("POST", "/health", nil)
 	w := httptest.NewRecorder()
@@ -174,7 +230,7 @@ func TestHandleMetrics_Success(t *testing.T) {
 			},
 		},
 	}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics", nil)
 	w := httptest.NewRecorder()
@@ -217,7 +273,7 @@ func TestHandleMetrics_WithNameFilter(t *testing.T) {
 			},
 		},
 	}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics?name=account_balance", nil)
 	w := httptest.NewRecorder()
@@ -251,7 +307,7 @@ func TestHandleMetrics_WithLimit(t *testing.T) {
 			{Name: "m3", Value: 3, Timestamp: 3, Labels: map[string]string{}},
 		},
 	}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics?limit=2", nil)
 	w := httptest.NewRecorder()
@@ -275,7 +331,7 @@ func TestHandleMetrics_InvalidLimit_Default(t *testing.T) {
 			{Name: "m1", Value: 1, Timestamp: 1, Labels: map[string]string{}},
 		},
 	}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics?limit=invalid", nil)
 	w := httptest.NewRecorder()
@@ -300,7 +356,7 @@ func TestHandleMetrics_LimitTooHigh_Capped(t *testing.T) {
 			{Name: "m1", Value: 1, Timestamp: 1, Labels: map[string]string{}},
 		},
 	}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics?limit=99999", nil)
 	w := httptest.NewRecorder()
@@ -321,7 +377,7 @@ func TestHandleMetrics_LimitTooHigh_Capped(t *testing.T) {
 // TestHandleMetrics_EmptyResult tests metrics endpoint with no metrics
 func TestHandleMetrics_EmptyResult(t *testing.T) {
 	store := &MockStorage{metrics: []types.Metric{}}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics", nil)
 	w := httptest.NewRecorder()
@@ -347,7 +403,7 @@ func TestHandleMetrics_StorageError(t *testing.T) {
 	store := &MockStorage{
 		getMetricsErr: fmt.Errorf("storage error"),
 	}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics", nil)
 	w := httptest.NewRecorder()
@@ -371,7 +427,7 @@ func TestHandleMetrics_StorageError(t *testing.T) {
 // TestHandleMetrics_MethodNotAllowed tests metrics endpoint with wrong method
 func TestHandleMetrics_MethodNotAllowed(t *testing.T) {
 	store := &MockStorage{}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("POST", "/api/v1/metrics", nil)
 	w := httptest.NewRecorder()
@@ -407,7 +463,7 @@ func TestHandleMetricsByLabel_Success(t *testing.T) {
 			},
 		},
 	}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics/account?key=account_id&value=0.0.5000", nil)
 	w := httptest.NewRecorder()
@@ -435,7 +491,7 @@ func TestHandleMetricsByLabel_Success(t *testing.T) {
 // TestHandleMetricsByLabel_MissingKey tests endpoint with missing key parameter
 func TestHandleMetricsByLabel_MissingKey(t *testing.T) {
 	store := &MockStorage{}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics/account?value=0.0.5000", nil)
 	w := httptest.NewRecorder()
@@ -459,7 +515,7 @@ func TestHandleMetricsByLabel_MissingKey(t *testing.T) {
 // TestHandleMetricsByLabel_MissingValue tests endpoint with missing value parameter
 func TestHandleMetricsByLabel_MissingValue(t *testing.T) {
 	store := &MockStorage{}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics/account?key=account_id", nil)
 	w := httptest.NewRecorder()
@@ -485,7 +541,7 @@ func TestHandleMetricsByLabel_NoMatches(t *testing.T) {
 			},
 		},
 	}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics/account?key=account_id&value=0.0.9999", nil)
 	w := httptest.NewRecorder()
@@ -511,7 +567,7 @@ func TestHandleMetricsByLabel_StorageError(t *testing.T) {
 	store := &MockStorage{
 		getByLabelErr: fmt.Errorf("storage error"),
 	}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics/account?key=account_id&value=0.0.5000", nil)
 	w := httptest.NewRecorder()
@@ -526,7 +582,7 @@ func TestHandleMetricsByLabel_StorageError(t *testing.T) {
 // TestHandleMetricsByLabel_MethodNotAllowed tests endpoint with wrong method
 func TestHandleMetricsByLabel_MethodNotAllowed(t *testing.T) {
 	store := &MockStorage{}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("DELETE", "/api/v1/metrics/account", nil)
 	w := httptest.NewRecorder()
@@ -546,7 +602,7 @@ func TestHandleStorageStats_Success(t *testing.T) {
 			{Name: "m2", Value: 2, Timestamp: 2, Labels: map[string]string{}},
 		},
 	}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/storage/stats", nil)
 	w := httptest.NewRecorder()
@@ -578,7 +634,7 @@ func TestHandleStorageStats_Success(t *testing.T) {
 // TestHandleStorageStats_EmptyStorage tests stats with empty storage
 func TestHandleStorageStats_EmptyStorage(t *testing.T) {
 	store := &MockStorage{metrics: []types.Metric{}}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/storage/stats", nil)
 	w := httptest.NewRecorder()
@@ -600,7 +656,7 @@ func TestHandleStorageStats_StorageError(t *testing.T) {
 	store := &MockStorage{
 		statsErr: fmt.Errorf("stats error"),
 	}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/storage/stats", nil)
 	w := httptest.NewRecorder()
@@ -616,7 +672,7 @@ func TestHandleStorageStats_StorageError(t *testing.T) {
 func TestHandleStorageStats_NotSupported(t *testing.T) {
 	// Create a storage that doesn't implement Stats()
 	store := &simpleStorage{}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/storage/stats", nil)
 	w := httptest.NewRecorder()
@@ -640,7 +696,7 @@ func TestHandleStorageStats_NotSupported(t *testing.T) {
 // TestHandleStorageStats_MethodNotAllowed tests stats endpoint with wrong method
 func TestHandleStorageStats_MethodNotAllowed(t *testing.T) {
 	store := &MockStorage{}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("POST", "/api/v1/storage/stats", nil)
 	w := httptest.NewRecorder()
@@ -655,7 +711,7 @@ func TestHandleStorageStats_MethodNotAllowed(t *testing.T) {
 // TestWriteJSON tests the writeJSON helper
 func TestWriteJSON(t *testing.T) {
 	store := &MockStorage{}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	w := httptest.NewRecorder()
 	response := HealthResponse{Status: "test", Version: "1.0"}
@@ -683,7 +739,7 @@ func TestWriteJSON(t *testing.T) {
 // TestWriteError tests the writeError helper
 func TestWriteError(t *testing.T) {
 	store := &MockStorage{}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	w := httptest.NewRecorder()
 	server.writeError(w, http.StatusInternalServerError, "test error")
@@ -709,7 +765,7 @@ func TestHandleMetrics_NegativeLimit(t *testing.T) {
 			{Name: "m1", Value: 1, Timestamp: 1, Labels: map[string]string{}},
 		},
 	}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics?limit=-10", nil)
 	w := httptest.NewRecorder()
@@ -766,7 +822,7 @@ func BenchmarkHandleMetrics(b *testing.B) {
 	}
 
 	store := &MockStorage{metrics: metrics}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -797,7 +853,7 @@ func BenchmarkHandleMetricsByLabel(b *testing.B) {
 	}
 
 	store := &MockStorage{metrics: metrics}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -810,12 +866,12 @@ func BenchmarkHandleMetricsByLabel(b *testing.B) {
 // TestResponseContentType ensures all responses have correct content type
 func TestResponseContentType(t *testing.T) {
 	store := &MockStorage{}
-	server := NewServer(8080, store)
+	server := NewServer(8080, store, &MockAlertManager{})
 
 	tests := []struct {
-		name   string
-		path   string
-		method string
+		name    string
+		path    string
+		method  string
 		handler func(http.ResponseWriter, *http.Request)
 	}{
 		{
@@ -844,4 +900,176 @@ func TestResponseContentType(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ============================================================================
+// Alert Endpoint Tests
+// ============================================================================
+
+// TestHandleListAlerts_Success tests listing all alert rules
+func TestHandleListAlerts_Success(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager with some test rules
+	// - Make GET request to /api/v1/alerts
+	// - Verify status 200
+	// - Verify response contains all rules
+	// - Verify count matches number of rules
+	t.Skip("TODO: implement TestHandleListAlerts_Success")
+}
+
+// TestHandleListAlerts_Empty tests listing when no rules exist
+func TestHandleListAlerts_Empty(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager with no rules
+	// - Make GET request to /api/v1/alerts
+	// - Verify status 200
+	// - Verify Alerts array is empty
+	// - Verify count is 0
+	t.Skip("TODO: implement TestHandleListAlerts_Empty")
+}
+
+// TestHandleListAlerts_MethodNotAllowed tests with wrong HTTP method
+func TestHandleListAlerts_MethodNotAllowed(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager
+	// - Make PUT request to /api/v1/alerts
+	// - Verify status 405 (Method Not Allowed)
+	// - Verify error message in response
+	t.Skip("TODO: implement TestHandleListAlerts_MethodNotAllowed")
+}
+
+// TestHandleCreateAlert_Success tests creating a new alert rule
+func TestHandleCreateAlert_Success(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager
+	// - Create valid CreateAlertRequest payload
+	// - Make POST request to /api/v1/alerts with JSON body
+	// - Verify status 201 (Created)
+	// - Verify response contains created rule with matching fields
+	// - Verify ID was generated
+	// - Verify AddRule was called on manager
+	t.Skip("TODO: implement TestHandleCreateAlert_Success")
+}
+
+// TestHandleCreateAlert_MissingName tests creating alert with missing name
+func TestHandleCreateAlert_MissingName(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager
+	// - Create CreateAlertRequest with empty Name
+	// - Make POST request to /api/v1/alerts
+	// - Verify status 400 (Bad Request)
+	// - Verify error message mentions name
+	// - Verify AddRule was NOT called
+	t.Skip("TODO: implement TestHandleCreateAlert_MissingName")
+}
+
+// TestHandleCreateAlert_InvalidCondition tests creating alert with invalid condition
+func TestHandleCreateAlert_InvalidCondition(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager
+	// - Create CreateAlertRequest with invalid condition (e.g., "foo")
+	// - Make POST request to /api/v1/alerts
+	// - Verify status 400 (Bad Request)
+	// - Verify error message mentions condition
+	// - Verify AddRule was NOT called
+	t.Skip("TODO: implement TestHandleCreateAlert_InvalidCondition")
+}
+
+// TestHandleCreateAlert_InvalidSeverity tests creating alert with invalid severity
+func TestHandleCreateAlert_InvalidSeverity(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager
+	// - Create CreateAlertRequest with invalid severity (e.g., "urgent")
+	// - Make POST request to /api/v1/alerts
+	// - Verify status 400 (Bad Request)
+	// - Verify error message mentions severity
+	// - Verify AddRule was NOT called
+	t.Skip("TODO: implement TestHandleCreateAlert_InvalidSeverity")
+}
+
+// TestHandleCreateAlert_InvalidJSON tests creating alert with malformed JSON
+func TestHandleCreateAlert_InvalidJSON(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager
+	// - Make POST request to /api/v1/alerts with invalid JSON body (e.g., "not json")
+	// - Verify status 400 (Bad Request)
+	// - Verify error message in response
+	// - Verify AddRule was NOT called
+	t.Skip("TODO: implement TestHandleCreateAlert_InvalidJSON")
+}
+
+// TestHandleCreateAlert_ManagerError tests when AddRule fails
+func TestHandleCreateAlert_ManagerError(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager with addRuleErr set to an error
+	// - Create valid CreateAlertRequest
+	// - Make POST request to /api/v1/alerts
+	// - Verify status 500 (Internal Server Error)
+	// - Verify error message in response
+	t.Skip("TODO: implement TestHandleCreateAlert_ManagerError")
+}
+
+// TestHandleCreateAlert_NegativeCooldown tests creating alert with negative cooldown
+func TestHandleCreateAlert_NegativeCooldown(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager
+	// - Create CreateAlertRequest with CooldownSeconds = -10
+	// - Make POST request to /api/v1/alerts
+	// - Verify status 400 (Bad Request)
+	// - Verify error message mentions cooldown
+	t.Skip("TODO: implement TestHandleCreateAlert_NegativeCooldown")
+}
+
+// TestHandleDeleteAlert_Success tests deleting an alert rule
+func TestHandleDeleteAlert_Success(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager with a test rule
+	// - Make DELETE request to /api/v1/alerts?id=<rule_id>
+	// - Verify status 204 (No Content)
+	// - Verify response body is empty
+	// - Verify RemoveRule was called with correct ID
+	t.Skip("TODO: implement TestHandleDeleteAlert_Success")
+}
+
+// TestHandleDeleteAlert_NotFound tests deleting non-existent rule
+func TestHandleDeleteAlert_NotFound(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager with no rules
+	// - Make DELETE request to /api/v1/alerts?id=nonexistent
+	// - Verify status 404 (Not Found)
+	// - Verify error message in response
+	// - Verify RemoveRule was called
+	t.Skip("TODO: implement TestHandleDeleteAlert_NotFound")
+}
+
+// TestHandleDeleteAlert_MissingID tests deleting without id parameter
+func TestHandleDeleteAlert_MissingID(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager
+	// - Make DELETE request to /api/v1/alerts (no id parameter)
+	// - Verify status 400 (Bad Request)
+	// - Verify error message mentions id parameter
+	// - Verify RemoveRule was NOT called
+	t.Skip("TODO: implement TestHandleDeleteAlert_MissingID")
+}
+
+// TestHandleDeleteAlert_EmptyID tests deleting with empty id parameter
+func TestHandleDeleteAlert_EmptyID(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager
+	// - Make DELETE request to /api/v1/alerts?id=
+	// - Verify status 400 (Bad Request)
+	// - Verify error message mentions id parameter
+	// - Verify RemoveRule was NOT called
+	t.Skip("TODO: implement TestHandleDeleteAlert_EmptyID")
+}
+
+// TestHandleDeleteAlert_ManagerError tests when RemoveRule fails (other than not found)
+func TestHandleDeleteAlert_ManagerError(t *testing.T) {
+	// TODO: Implement
+	// - Create MockAlertManager with removeRuleErr set to an error (not ErrRuleNotFound)
+	// - Make DELETE request to /api/v1/alerts?id=test_rule
+	// - Verify status 500 (Internal Server Error)
+	// - Verify error message in response
+	t.Skip("TODO: implement TestHandleDeleteAlert_ManagerError")
 }

@@ -72,16 +72,24 @@ type CreateAlertRequest struct {
 	CooldownSeconds int     `json:"cooldown_seconds"`
 }
 
+// AlertingManager interface defines the contract for alert management
+// This allows the Server to work with both the real AlertManager and test mocks
+type AlertingManager interface {
+	GetRules() []alerting.AlertRule
+	AddRule(rule alerting.AlertRule) error
+	RemoveRule(ruleID string) error
+}
+
 // Server represents the HTTP API server
 type Server struct {
 	port         int
 	store        storage.Storage
-	alertManager *alerting.Manager
+	alertManager AlertingManager
 	server       *http.Server
 }
 
 // NewServer creates a new API server
-func NewServer(port int, store storage.Storage, alertManager *alerting.Manager) *Server {
+func NewServer(port int, store storage.Storage, alertManager AlertingManager) *Server {
 	return &Server{
 		port:         port,
 		store:        store,
