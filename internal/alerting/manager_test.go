@@ -1,6 +1,7 @@
 package alerting
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -79,8 +80,14 @@ func TestRemoveRule(t *testing.T) {
 	rule1 := AlertRule{ID: "rule1", Name: "Rule 1", Enabled: true}
 	rule2 := AlertRule{ID: "rule2", Name: "Rule 2", Enabled: true}
 
-	manager.AddRule(rule1)
-	manager.AddRule(rule2)
+	err := manager.AddRule(rule1)
+	if err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
+	err = manager.AddRule(rule2)
+	if err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
 
 	rules := manager.GetRules()
 	if len(rules) != 2 {
@@ -88,7 +95,7 @@ func TestRemoveRule(t *testing.T) {
 	}
 
 	// Remove first rule
-	err := manager.RemoveRule("rule1")
+	err = manager.RemoveRule("rule1")
 	if err != nil {
 		t.Fatalf("RemoveRule failed: %v", err)
 	}
@@ -114,7 +121,7 @@ func TestRemoveRuleNotFound(t *testing.T) {
 	manager := NewManager(cfg)
 
 	err := manager.RemoveRule("nonexistent")
-	if err != ErrRuleNotFound {
+	if !errors.Is(err, ErrRuleNotFound) {
 		t.Errorf("Expected ErrRuleNotFound, got %v", err)
 	}
 }
@@ -132,8 +139,12 @@ func TestGetRules(t *testing.T) {
 	rule1 := AlertRule{ID: "rule1", Name: "Rule 1", Enabled: true}
 	rule2 := AlertRule{ID: "rule2", Name: "Rule 2", Enabled: false}
 
-	manager.AddRule(rule1)
-	manager.AddRule(rule2)
+	if err := manager.AddRule(rule1); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
+	if err := manager.AddRule(rule2); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
 
 	rules := manager.GetRules()
 	if len(rules) != 2 {
@@ -167,7 +178,9 @@ func TestCheckMetricThresholdGreaterThan(t *testing.T) {
 		Enabled:   true,
 		Severity:  "warning",
 	}
-	manager.AddRule(rule)
+	if err := manager.AddRule(rule); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
 
 	// Test metric value above threshold
 	metric := types.Metric{
@@ -208,7 +221,9 @@ func TestCheckMetricThresholdLessThan(t *testing.T) {
 		Enabled:   true,
 		Severity:  "critical",
 	}
-	manager.AddRule(rule)
+	if err := manager.AddRule(rule); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
 
 	metric := types.Metric{
 		Name:  "test_metric",
@@ -242,7 +257,9 @@ func TestCheckMetricThresholdEqual(t *testing.T) {
 		Enabled:   true,
 		Severity:  "info",
 	}
-	manager.AddRule(rule)
+	if err := manager.AddRule(rule); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
 
 	metric := types.Metric{
 		Name:  "test_metric",
@@ -276,7 +293,9 @@ func TestCheckMetricDisabledRule(t *testing.T) {
 		Enabled:   false, // Disabled
 		Severity:  "warning",
 	}
-	manager.AddRule(rule)
+	if err := manager.AddRule(rule); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
 
 	metric := types.Metric{
 		Name:  "test_metric",
@@ -318,7 +337,9 @@ func TestCheckMetricNoMatch(t *testing.T) {
 		Enabled:   true,
 		Severity:  "warning",
 	}
-	manager.AddRule(rule)
+	if err := manager.AddRule(rule); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
 
 	metric := types.Metric{
 		Name:  "test_metric",
@@ -361,7 +382,9 @@ func TestCheckMetricCooldown(t *testing.T) {
 		Enabled:   true,
 		Severity:  "warning",
 	}
-	manager.AddRule(rule)
+	if err := manager.AddRule(rule); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
 
 	metric := types.Metric{
 		Name:  "test_metric",

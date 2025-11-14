@@ -70,6 +70,18 @@ func (m *Manager) GetRules() []AlertRule {
 	return rules
 }
 
+// formatMetricId Create a metric ID by concatenating the labels
+func formatMetricId(alert AlertEvent, metric types.Metric) {
+	// Simple approach: name + account_id (if present)
+	accountID := metric.Labels["account_id"]
+	if accountID != "" {
+		alert.MetricID = fmt.Sprintf("%s[%s]", metric.Name, accountID)
+	} else {
+		alert.MetricID = metric.Name
+	}
+	// Output: "account_balance[0.0.5000]"
+}
+
 // CheckMetric evaluates a metric against all active rules
 // If a rule condition is met, an alert is queued for sending
 func (m *Manager) CheckMetric(metric types.Metric) error {
@@ -112,10 +124,7 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 				Timestamp: time.Now().Unix(),
 				Value:     metric.Value,
 			}
-
-			// Create a metric ID by concatenating the labels
-			// TODO consider which labels are most important for the metric
-			alert.MetricID = fmt.Sprintf("%s:%v", metric.Name, metric.Labels)
+			formatMetricId(alert, metric)
 
 			select {
 			case m.alertQueue <- alert:
@@ -142,11 +151,10 @@ func (m *Manager) Run(ctx context.Context) error {
 			log.Println("[AlertManager] Stopping alert processor")
 			return ctx.Err()
 		case alert := <-m.alertQueue:
-			// TODO: Send alert to webhooks
 			log.Printf("[AlertManager] Alert triggered: %s (severity: %s, value: %.2f)",
 				alert.RuleName, alert.Severity, alert.Value)
 
-			// Send to webhooks (parallel)
+			// Send to webhooks in parallel using goroutines
 			for _, webhook := range m.webhooks {
 				go m.sendWebhook(webhook, alert)
 			}
