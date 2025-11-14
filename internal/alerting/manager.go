@@ -94,6 +94,11 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 			continue
 		}
 
+		// Skip rules that don't apply to this metric
+		if rule.MetricName != metric.Name {
+			continue
+		}
+
 		log.Printf("[AlertManager] Evaluating metric against rule: %s", rule.ID)
 
 		// Extract and compare to actual metric value
