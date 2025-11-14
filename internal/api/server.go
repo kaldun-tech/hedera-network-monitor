@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/alerting"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/storage"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
@@ -43,15 +44,15 @@ type ErrorResponse struct {
 
 // AlertRuleResponse represents an alert rule in API responses
 type AlertRuleResponse struct {
-	ID              string `json:"id"`
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	MetricName      string `json:"metric_name"`
-	Condition       string `json:"condition"`
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	Description     string  `json:"description"`
+	MetricName      string  `json:"metric_name"`
+	Condition       string  `json:"condition"`
 	Threshold       float64 `json:"threshold"`
-	Severity        string `json:"severity"`
-	Enabled         bool   `json:"enabled"`
-	CooldownSeconds int    `json:"cooldown_seconds"`
+	Severity        string  `json:"severity"`
+	Enabled         bool    `json:"enabled"`
+	CooldownSeconds int     `json:"cooldown_seconds"`
 }
 
 // AlertListResponse wraps a list of alert rules
@@ -325,12 +326,82 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 // GET /api/v1/alerts
 // Returns: AlertListResponse with all alert rules
 func (s *Server) handleListAlerts(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement list alerts
-	// - Get all rules from alertManager using GetRules()
-	// - Convert alerting.AlertRule to AlertRuleResponse
-	// - Return AlertListResponse with count
-	log.Printf("[API] GET /api/v1/alerts - TODO: implement")
-	s.writeError(w, http.StatusNotImplemented, "not implemented")
+	// Get all rules from alertManager using GetRules()
+	log.Printf("[API] GET /api/v1/alerts")
+	allRules := s.alertManager.GetRules()
+
+	// Convert alerting.AlertRule to AlertRuleResponse
+	alertResponseList := make([]AlertRuleResponse, len(allRules))
+	for i, rule := range allRules {
+		ruleResponse := AlertRuleResponse{
+			ID:              rule.ID,
+			Name:            rule.Name,
+			Description:     rule.Description,
+			MetricName:      rule.MetricName,
+			Condition:       rule.Condition,
+			Threshold:       rule.Threshold,
+			Severity:        rule.Severity,
+			Enabled:         rule.Enabled,
+			CooldownSeconds: rule.CooldownSeconds,
+		}
+		alertResponseList[i] = ruleResponse
+	}
+
+	// Return AlertListResponse with count
+	s.writeJSON(w, http.StatusOK, AlertListResponse{
+		Alerts: alertResponseList,
+		Count:  len(alertResponseList),
+	})
+}
+
+// Validate validates a CreateAlertRequest
+// Returns: error if invalid
+func (r *CreateAlertRequest) Validate() error {
+	// Name, MetricName, Condition, Severity validation
+	// Similar to config.AlertRule.Validate
+	if r.Name == "" {
+		return fmt.Errorf("rule name cannot be empty")
+	}
+	if r.MetricName == "" {
+		return fmt.Errorf("rule metric name cannot be empty")
+	}
+	if r.Condition == "" {
+		return fmt.Errorf("rule condition name cannot be empty")
+	}
+	if r.Severity == "" {
+		return fmt.Errorf("rule severity name cannot be empty")
+	}
+
+	// Validate condition is supported
+	validConditions := []string{">", "<", ">=", "<=", "==", "!=", "changed", "increased", "decreased"}
+	isValid := false
+	for _, vc := range validConditions {
+		if r.Condition == vc {
+			isValid = true
+			break
+		}
+	}
+	if !isValid {
+		return fmt.Errorf("invalid condition: %s", r.Condition)
+	}
+
+	// Validate severity
+	validSeverities := []string{"info", "warning", "critical"}
+	isSevere := false
+	for _, vs := range validSeverities {
+		if r.Severity == vs {
+			isSevere = true
+			break
+		}
+	}
+	if !isSevere {
+		return fmt.Errorf("invalid severity: %s", r.Severity)
+	}
+
+	if r.CooldownSeconds < 0 {
+		return fmt.Errorf("cooldown seconds cannot be negative: %d", r.CooldownSeconds)
+	}
+	return nil
 }
 
 // handleCreateAlert creates a new alert rule
@@ -338,15 +409,57 @@ func (s *Server) handleListAlerts(w http.ResponseWriter, r *http.Request) {
 // Request body: CreateAlertRequest
 // Returns: AlertRuleResponse with created rule
 func (s *Server) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement create alert
-	// - Parse JSON body into CreateAlertRequest
-	// - Validate required fields (MetricName, Condition, Threshold, Severity)
-	// - Generate unique ID (UUID or sequential)
-	// - Convert to alerting.AlertRule
-	// - Call alertManager.AddRule()
-	// - Return created rule as AlertRuleResponse with 201 status
-	log.Printf("[API] POST /api/v1/alerts - TODO: implement")
-	s.writeError(w, http.StatusNotImplemented, "not implemented")
+	log.Printf("[API] POST /api/v1/alerts")
+	// Parse JSON body into CreateAlertRequest
+	createRequest := CreateAlertRequest{}
+	err := json.NewDecoder(r.Body).Decode(&createRequest)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Validate required fields (MetricName, Condition, Threshold, Severity)
+	err = createRequest.Validate()
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Generate unique ID (UUID or sequential)
+	newUUID := uuid.New().String()
+	fmt.Printf("Generated UUID for new rule: %s\n", newUUID)
+
+	// Convert to alerting.AlertRule
+	rule := alerting.AlertRule{
+		ID:              newUUID,
+		Name:            createRequest.Name,
+		Description:     createRequest.Description,
+		MetricName:      createRequest.MetricName,
+		Condition:       createRequest.Condition,
+		Threshold:       createRequest.Threshold,
+		Enabled:         true,
+		Severity:        createRequest.Severity,
+		CooldownSeconds: createRequest.CooldownSeconds,
+	}
+
+	err = s.alertManager.AddRule(rule)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, err.Error())
+	}
+
+	// Return created rule as AlertRuleResponse with 201 status
+	response := AlertRuleResponse{
+		ID:              rule.ID,
+		Name:            rule.Name,
+		Description:     rule.Description,
+		MetricName:      rule.MetricName,
+		Condition:       rule.Condition,
+		Threshold:       rule.Threshold,
+		Severity:        rule.Severity,
+		Enabled:         rule.Enabled,
+		CooldownSeconds: rule.CooldownSeconds,
+	}
+	s.writeJSON(w, http.StatusCreated, response)
 }
 
 // handleDeleteAlert deletes an alert rule
@@ -354,12 +467,23 @@ func (s *Server) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
 // Query parameter: id - the alert rule ID to delete
 // Returns: 204 No Content on success
 func (s *Server) handleDeleteAlert(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement delete alert
-	// - Extract rule ID from URL query parameter (r.URL.Query().Get("id"))
-	// - Validate ID is not empty
-	// - Call alertManager.RemoveRule(id)
-	// - Handle ErrRuleNotFound (404)
-	// - Return 204 No Content on success
-	log.Printf("[API] DELETE /api/v1/alerts - TODO: implement")
-	s.writeError(w, http.StatusNotImplemented, "not implemented")
+	log.Printf("[API] DELETE /api/v1/alerts")
+	// Extract rule ID from URL query parameter
+	ruleID := r.URL.Query().Get("id")
+
+	// Validate ID is not empty
+	if ruleID == "" {
+		s.writeError(w, http.StatusBadRequest, "rule ID query parameter is required")
+		return
+	}
+
+	// Remove rule, handle ErrRuleNotFound (404)
+	err := s.alertManager.RemoveRule(ruleID)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	// Return 204 No Content on success
+	w.WriteHeader(http.StatusNoContent)
 }
