@@ -393,10 +393,23 @@ func TestCheckMetricCooldown(t *testing.T) {
 		Labels: map[string]string{},
 	}
 
-	// First call should complete without error
+	// First call should complete without error and queue an alert
 	err := manager.CheckMetric(metric)
 	if err != nil {
 		t.Fatalf("First CheckMetric failed: %v", err)
+	}
+
+	// Allow time for async alert processing
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify first alert was queued
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "spam_rule" {
+			t.Errorf("Expected alert for spam_rule, got %s", alert.RuleID)
+		}
+	default:
+		t.Fatal("Expected first alert to be queued")
 	}
 
 	// Second call should also complete without error
@@ -405,8 +418,13 @@ func TestCheckMetricCooldown(t *testing.T) {
 		t.Fatalf("Second CheckMetric failed: %v", err)
 	}
 
-	// TODO: Once condition evaluation is implemented, verify that
-	// the second alert is not queued due to cooldown
+	// Verify second alert was NOT queued due to cooldown
+	select {
+	case <-manager.alertQueue:
+		t.Error("Second alert should not be queued due to cooldown period")
+	default:
+		// Expected: no alert queued due to cooldown
+	}
 }
 
 // TestAlertEventCreation verifies AlertEvent structure
