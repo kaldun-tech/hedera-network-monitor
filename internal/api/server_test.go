@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -908,168 +909,343 @@ func TestResponseContentType(t *testing.T) {
 
 // TestHandleListAlerts_Success tests listing all alert rules
 func TestHandleListAlerts_Success(t *testing.T) {
-	// TODO: Implement
-	// - Create MockAlertManager with some test rules
-	// - Make GET request to /api/v1/alerts
-	// - Verify status 200
-	// - Verify response contains all rules
-	// - Verify count matches number of rules
-	t.Skip("TODO: implement TestHandleListAlerts_Success")
+	// Create MockAlertManager with some test rules
+	alertMgr := &MockAlertManager{
+		rules: []alerting.AlertRule{
+			{
+				ID:              "rule-1",
+				Name:            "Low Balance Alert",
+				Description:     "Alert when account balance is too low",
+				MetricName:      "account_balance",
+				Condition:       "<",
+				Threshold:       1000000,
+				Enabled:         true,
+				Severity:        "warning",
+				CooldownSeconds: 300,
+			},
+			{
+				ID:              "rule-2",
+				Name:            "High Transaction Count",
+				Description:     "Alert when transactions exceed threshold",
+				MetricName:      "transaction_count",
+				Condition:       ">",
+				Threshold:       1000,
+				Enabled:         true,
+				Severity:        "info",
+				CooldownSeconds: 600,
+			},
+			{
+				ID:              "rule-3",
+				Name:            "Network Offline",
+				Description:     "Alert when network status is down",
+				MetricName:      "network_status",
+				Condition:       "==",
+				Threshold:       0,
+				Enabled:         true,
+				Severity:        "critical",
+				CooldownSeconds: 60,
+			},
+		},
+	}
+	store := &MockStorage{}
+	server := NewServer(8080, store, alertMgr)
+
+	req := httptest.NewRequest("GET", "/api/v1/alerts", nil)
+	w := httptest.NewRecorder()
+	server.handleAlerts(w, req)
+
+	// Verify status 200
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	// Decode response
+	var response AlertListResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Verify count matches number of rules
+	if response.Count != 3 {
+		t.Errorf("expected count 3, got %d", response.Count)
+	}
+
+	// Verify all rules are present
+	if len(response.Alerts) != 3 {
+		t.Errorf("expected 3 alerts in array, got %d", len(response.Alerts))
+	}
+
+	// Verify specific rule fields are populated correctly
+	if response.Alerts[0].Name != "Low Balance Alert" {
+		t.Errorf("expected rule name 'Low Balance Alert', got '%s'", response.Alerts[0].Name)
+	}
+	if response.Alerts[0].Condition != "<" {
+		t.Errorf("expected condition '<', got '%s'", response.Alerts[0].Condition)
+	}
+	if response.Alerts[0].Severity != "warning" {
+		t.Errorf("expected severity 'warning', got '%s'", response.Alerts[0].Severity)
+	}
+	if response.Alerts[2].Severity != "critical" {
+		t.Errorf("expected third rule severity 'critical', got '%s'", response.Alerts[2].Severity)
+	}
 }
 
 // TestHandleListAlerts_Empty tests listing when no rules exist
 func TestHandleListAlerts_Empty(t *testing.T) {
-	// TODO: Implement
-	// - Create MockAlertManager with no rules
-	// - Make GET request to /api/v1/alerts
-	// - Verify status 200
-	// - Verify Alerts array is empty
-	// - Verify count is 0
-	t.Skip("TODO: implement TestHandleListAlerts_Empty")
+	// Create MockAlertManager with no rules
+	alertMgr := &MockAlertManager{}
+	store := &MockStorage{}
+	server := NewServer(8080, store, alertMgr)
+
+	// Make GET request to /api/v1/alerts
+	req := httptest.NewRequest("GET", "/api/v1/alerts", nil)
+	w := httptest.NewRecorder()
+	server.handleAlerts(w, req)
+
+	// Verify status 200
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	// Decode response
+	var response AlertListResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Verify count is 0
+	if response.Count != 0 {
+		t.Errorf("expected count 0, got %d", response.Count)
+	}
+
+	// Verify Alerts array is empty
+	if len(response.Alerts) != 0 {
+		t.Errorf("expected empty alert array, got %d", len(response.Alerts))
+	}
 }
 
 // TestHandleListAlerts_MethodNotAllowed tests with wrong HTTP method
 func TestHandleListAlerts_MethodNotAllowed(t *testing.T) {
-	// TODO: Implement
-	// - Create MockAlertManager
-	// - Make PUT request to /api/v1/alerts
-	// - Verify status 405 (Method Not Allowed)
-	// - Verify error message in response
-	t.Skip("TODO: implement TestHandleListAlerts_MethodNotAllowed")
+	// Create MockAlertManager
+	alertMgr := &MockAlertManager{}
+	store := &MockStorage{}
+	server := NewServer(8080, store, alertMgr)
+
+	// Make PUT request to /api/v1/alerts
+	req := httptest.NewRequest("PUT", "/api/v1/alerts", nil)
+	w := httptest.NewRecorder()
+	server.handleAlerts(w, req)
+
+	// Verify status 405 (Method Not Allowed)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status 405, got %d", w.Code)
+	}
+
+	// Decode response
+	var response ErrorResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	// Verify error message in response
+	if response.Error != "method not allowed" {
+		t.Fatalf("expected error 'method not allowed', got '%s'", response.Error)
+	}
 }
 
 // TestHandleCreateAlert_Success tests creating a new alert rule
 func TestHandleCreateAlert_Success(t *testing.T) {
-	// TODO: Implement
-	// - Create MockAlertManager
-	// - Create valid CreateAlertRequest payload
-	// - Make POST request to /api/v1/alerts with JSON body
-	// - Verify status 201 (Created)
-	// - Verify response contains created rule with matching fields
-	// - Verify ID was generated
-	// - Verify AddRule was called on manager
-	t.Skip("TODO: implement TestHandleCreateAlert_Success")
+	// Create MockAlertManager
+	alertMgr := &MockAlertManager{}
+	store := &MockStorage{}
+	server := NewServer(8080, store, alertMgr)
+
+	// Create valid CreateAlertRequest payload
+	request := &CreateAlertRequest{
+		Name:            "Low Balance Alert",
+		Description:     "Alert when account balance is too low",
+		MetricName:      "account_balance",
+		Condition:       "<",
+		Threshold:       1000000,
+		Severity:        "warning",
+		CooldownSeconds: 300,
+	}
+	jsonBody, _ := json.Marshal(request)
+
+	// Make POST request to /api/v1/alerts with JSON body
+	req := httptest.NewRequest("POST", "/api/v1/alerts", bytes.NewReader(jsonBody))
+	w := httptest.NewRecorder()
+	server.handleAlerts(w, req)
+
+	// Verify status 201 (Created)
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected status 201, got %d", w.Code)
+	}
+
+	// Decode response
+	var response AlertRuleResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Verify response contains created rule with matching fields
+	if response.Name != request.Name {
+		t.Errorf("expected name '%s', got '%s'", request.Name, response.Name)
+	}
+	if response.Description != request.Description {
+		t.Errorf("expected description '%s', got '%s'", request.Description, response.Description)
+	}
+	if response.MetricName != request.MetricName {
+		t.Errorf("expected metric name '%s', got '%s'", request.MetricName, response.MetricName)
+	}
+	if response.Condition != request.Condition {
+		t.Errorf("expected condition '%s', got '%s'", request.Condition, response.Condition)
+	}
+	if response.Threshold != request.Threshold {
+		t.Errorf("expected name '%f', got '%f'", request.Threshold, response.Threshold)
+	}
+	if response.Severity != request.Severity {
+		t.Errorf("expected name '%s', got '%s'", request.Severity, response.Severity)
+	}
+	if response.CooldownSeconds != request.CooldownSeconds {
+		t.Errorf("expected name '%d', got '%d'", request.CooldownSeconds, response.CooldownSeconds)
+	}
+
+	// Verify ID was generated
+	if response.ID == "" {
+		t.Error("expected non-empty id")
+	}
+	t.Logf("response ID: '%s'", response.ID)
+
+	// Verify AddRule was called
+	if alertMgr.addRuleCalls != 1 {
+		t.Errorf("expected AddRule to be called once, got %d calls", alertMgr.addRuleCalls)
+	}
+
+	// Verify the rule that was added has correct fields
+	if alertMgr.lastAddedRule.Name != "Low Balance Alert" {
+		t.Errorf("expected rule name 'Low Balance Alert', got '%s'", alertMgr.lastAddedRule.Name)
+	}
 }
 
 // TestHandleCreateAlert_MissingName tests creating alert with missing name
 func TestHandleCreateAlert_MissingName(t *testing.T) {
 	// TODO: Implement
-	// - Create MockAlertManager
-	// - Create CreateAlertRequest with empty Name
-	// - Make POST request to /api/v1/alerts
-	// - Verify status 400 (Bad Request)
-	// - Verify error message mentions name
-	// - Verify AddRule was NOT called
+	// Create MockAlertManager
+	// Create CreateAlertRequest with empty Name
+	// Make POST request to /api/v1/alerts
+	// Verify status 400 (Bad Request)
+	// Verify error message mentions name
+	// Verify AddRule was NOT called
 	t.Skip("TODO: implement TestHandleCreateAlert_MissingName")
 }
 
 // TestHandleCreateAlert_InvalidCondition tests creating alert with invalid condition
 func TestHandleCreateAlert_InvalidCondition(t *testing.T) {
 	// TODO: Implement
-	// - Create MockAlertManager
-	// - Create CreateAlertRequest with invalid condition (e.g., "foo")
-	// - Make POST request to /api/v1/alerts
-	// - Verify status 400 (Bad Request)
-	// - Verify error message mentions condition
-	// - Verify AddRule was NOT called
+	// Create MockAlertManager
+	// Create CreateAlertRequest with invalid condition (e.g., "foo")
+	// Make POST request to /api/v1/alerts
+	// Verify status 400 (Bad Request)
+	// Verify error message mentions condition
+	// Verify AddRule was NOT called
 	t.Skip("TODO: implement TestHandleCreateAlert_InvalidCondition")
 }
 
 // TestHandleCreateAlert_InvalidSeverity tests creating alert with invalid severity
 func TestHandleCreateAlert_InvalidSeverity(t *testing.T) {
 	// TODO: Implement
-	// - Create MockAlertManager
-	// - Create CreateAlertRequest with invalid severity (e.g., "urgent")
-	// - Make POST request to /api/v1/alerts
-	// - Verify status 400 (Bad Request)
-	// - Verify error message mentions severity
-	// - Verify AddRule was NOT called
+	// Create MockAlertManager
+	// Create CreateAlertRequest with invalid severity (e.g., "urgent")
+	// Make POST request to /api/v1/alerts
+	// Verify status 400 (Bad Request)
+	// Verify error message mentions severity
+	// Verify AddRule was NOT called
 	t.Skip("TODO: implement TestHandleCreateAlert_InvalidSeverity")
 }
 
 // TestHandleCreateAlert_InvalidJSON tests creating alert with malformed JSON
 func TestHandleCreateAlert_InvalidJSON(t *testing.T) {
 	// TODO: Implement
-	// - Create MockAlertManager
-	// - Make POST request to /api/v1/alerts with invalid JSON body (e.g., "not json")
-	// - Verify status 400 (Bad Request)
-	// - Verify error message in response
-	// - Verify AddRule was NOT called
+	// Create MockAlertManager
+	// Make POST request to /api/v1/alerts with invalid JSON body (e.g., "not json")
+	// Verify status 400 (Bad Request)
+	// Verify error message in response
+	// Verify AddRule was NOT called
 	t.Skip("TODO: implement TestHandleCreateAlert_InvalidJSON")
 }
 
 // TestHandleCreateAlert_ManagerError tests when AddRule fails
 func TestHandleCreateAlert_ManagerError(t *testing.T) {
 	// TODO: Implement
-	// - Create MockAlertManager with addRuleErr set to an error
-	// - Create valid CreateAlertRequest
-	// - Make POST request to /api/v1/alerts
-	// - Verify status 500 (Internal Server Error)
-	// - Verify error message in response
+	// Create MockAlertManager with addRuleErr set to an error
+	// Create valid CreateAlertRequest
+	// Make POST request to /api/v1/alerts
+	// Verify status 500 (Internal Server Error)
+	// Verify error message in response
 	t.Skip("TODO: implement TestHandleCreateAlert_ManagerError")
 }
 
 // TestHandleCreateAlert_NegativeCooldown tests creating alert with negative cooldown
 func TestHandleCreateAlert_NegativeCooldown(t *testing.T) {
 	// TODO: Implement
-	// - Create MockAlertManager
-	// - Create CreateAlertRequest with CooldownSeconds = -10
-	// - Make POST request to /api/v1/alerts
-	// - Verify status 400 (Bad Request)
-	// - Verify error message mentions cooldown
+	// Create MockAlertManager
+	// Create CreateAlertRequest with CooldownSeconds = -10
+	// Make POST request to /api/v1/alerts
+	// Verify status 400 (Bad Request)
+	// Verify error message mentions cooldown
 	t.Skip("TODO: implement TestHandleCreateAlert_NegativeCooldown")
 }
 
 // TestHandleDeleteAlert_Success tests deleting an alert rule
 func TestHandleDeleteAlert_Success(t *testing.T) {
 	// TODO: Implement
-	// - Create MockAlertManager with a test rule
-	// - Make DELETE request to /api/v1/alerts?id=<rule_id>
-	// - Verify status 204 (No Content)
-	// - Verify response body is empty
-	// - Verify RemoveRule was called with correct ID
+	// Create MockAlertManager with a test rule
+	// Make DELETE request to /api/v1/alerts?id=<rule_id>
+	// Verify status 204 (No Content)
+	// Verify response body is empty
+	// Verify RemoveRule was called with correct ID
 	t.Skip("TODO: implement TestHandleDeleteAlert_Success")
 }
 
 // TestHandleDeleteAlert_NotFound tests deleting non-existent rule
 func TestHandleDeleteAlert_NotFound(t *testing.T) {
 	// TODO: Implement
-	// - Create MockAlertManager with no rules
-	// - Make DELETE request to /api/v1/alerts?id=nonexistent
-	// - Verify status 404 (Not Found)
-	// - Verify error message in response
-	// - Verify RemoveRule was called
+	// Create MockAlertManager with no rules
+	// Make DELETE request to /api/v1/alerts?id=nonexistent
+	// Verify status 404 (Not Found)
+	// Verify error message in response
+	// Verify RemoveRule was called
 	t.Skip("TODO: implement TestHandleDeleteAlert_NotFound")
 }
 
 // TestHandleDeleteAlert_MissingID tests deleting without id parameter
 func TestHandleDeleteAlert_MissingID(t *testing.T) {
 	// TODO: Implement
-	// - Create MockAlertManager
-	// - Make DELETE request to /api/v1/alerts (no id parameter)
-	// - Verify status 400 (Bad Request)
-	// - Verify error message mentions id parameter
-	// - Verify RemoveRule was NOT called
+	// Create MockAlertManager
+	// Make DELETE request to /api/v1/alerts (no id parameter)
+	// Verify status 400 (Bad Request)
+	// Verify error message mentions id parameter
+	// Verify RemoveRule was NOT called
 	t.Skip("TODO: implement TestHandleDeleteAlert_MissingID")
 }
 
 // TestHandleDeleteAlert_EmptyID tests deleting with empty id parameter
 func TestHandleDeleteAlert_EmptyID(t *testing.T) {
 	// TODO: Implement
-	// - Create MockAlertManager
-	// - Make DELETE request to /api/v1/alerts?id=
-	// - Verify status 400 (Bad Request)
-	// - Verify error message mentions id parameter
-	// - Verify RemoveRule was NOT called
+	// Create MockAlertManager
+	// Make DELETE request to /api/v1/alerts?id=
+	// Verify status 400 (Bad Request)
+	// Verify error message mentions id parameter
+	// Verify RemoveRule was NOT called
 	t.Skip("TODO: implement TestHandleDeleteAlert_EmptyID")
 }
 
 // TestHandleDeleteAlert_ManagerError tests when RemoveRule fails (other than not found)
 func TestHandleDeleteAlert_ManagerError(t *testing.T) {
 	// TODO: Implement
-	// - Create MockAlertManager with removeRuleErr set to an error (not ErrRuleNotFound)
-	// - Make DELETE request to /api/v1/alerts?id=test_rule
-	// - Verify status 500 (Internal Server Error)
-	// - Verify error message in response
+	// Create MockAlertManager with removeRuleErr set to an error (not ErrRuleNotFound)
+	// Make DELETE request to /api/v1/alerts?id=test_rule
+	// Verify status 500 (Internal Server Error)
+	// Verify error message in response
 	t.Skip("TODO: implement TestHandleDeleteAlert_ManagerError")
 }
