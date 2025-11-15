@@ -19,41 +19,41 @@ type Config struct {
 
 // NetworkConfig contains Hedera network configuration
 type NetworkConfig struct {
-	Name        string // "mainnet" or "testnet"
-	OperatorID  string // "0.0.3"
-	OperatorKey string // Private key for operator account
+	Name        string `mapstructure:"name"` // "mainnet" or "testnet"
+	OperatorID  string `mapstructure:"operator_id"` // "0.0.3"
+	OperatorKey string `mapstructure:"operator_key"` // Private key for operator account
 }
 
 // AlertingConfig contains alert configuration
 type AlertingConfig struct {
-	Enabled         bool
-	Webhooks        []string // Webhook URLs for notifications
-	Rules           []AlertRule
-	CooldownSeconds int // Default cooldown for all rules (seconds)
-	QueueBufferSize int // Alert queue buffer size (default: 100)
+	Enabled         bool `mapstructure:"enabled"`
+	Webhooks        []string `mapstructure:"webhooks"` // Webhook URLs for notifications
+	Rules           []AlertRule `mapstructure:"rules"`
+	CooldownSeconds int `mapstructure:"cooldown_seconds"` // Default cooldown for all rules (seconds)
+	QueueBufferSize int `mapstructure:"queue_buffer_size"` // Alert queue buffer size (default: 100)
 }
 
 // AlertRule represents an alert configuration
 type AlertRule struct {
-	ID              string
-	Name            string
-	MetricName      string
-	Condition       string
-	Threshold       float64
-	Severity        string
-	CooldownSeconds int // Optional: override default cooldown (0 = use AlertingConfig default)
+	ID              string `mapstructure:"id"`
+	Name            string `mapstructure:"name"`
+	MetricName      string `mapstructure:"metric_name"`
+	Condition       string `mapstructure:"condition"`
+	Threshold       float64 `mapstructure:"threshold"`
+	Severity        string `mapstructure:"severity"`
+	CooldownSeconds int `mapstructure:"cooldown_seconds"` // Optional: override default cooldown (0 = use AlertingConfig default)
 }
 
 // APIConfig contains API server configuration
 type APIConfig struct {
-	Port int    // Port to listen on
-	Host string // Host to bind to
+	Port int `mapstructure:"port"` // Port to listen on
+	Host string `mapstructure:"host"` // Host to bind to
 }
 
 // LoggingConfig contains logging configuration
 type LoggingConfig struct {
-	Level  string // "debug", "info", "warn", "error"
-	Format string // "json" or "text"
+	Level  string `mapstructure:"level"` // "debug", "info", "warn", "error"
+	Format string `mapstructure:"format"` // "json" or "text"
 }
 
 // Load loads configuration from a YAML file

@@ -61,7 +61,7 @@ func TestValidate_InvalidNetworkMainnet(t *testing.T) {
 
 func TestValidate_NoAccounts(t *testing.T) {
 	config := &Config{
-		Network: NetworkConfig{Name: "testnet"},
+		Network:  NetworkConfig{Name: "testnet"},
 		Accounts: []collector.AccountConfig{},
 	}
 	err := config.Validate()
@@ -230,7 +230,12 @@ func TestLoad_ValidYAMLFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func(name string) {
+		err := os.Remove(name)
+		if err != nil {
+			t.Errorf("failed to remove temp file: %v", err)
+		}
+	}(tmpFile.Name())
 
 	// Write valid config
 	content := `
@@ -263,10 +268,12 @@ alerting:
 	if _, err := tmpFile.WriteString(content); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
-	tmpFile.Close()
+	err = tmpFile.Close()
+	if err != nil {
+		t.Errorf("failed to close temp file: %v", err)
+	}
 
 	config, err := Load(tmpFile.Name())
-
 	if err != nil {
 		t.Errorf("expected no error loading valid config, got: %v", err)
 	}

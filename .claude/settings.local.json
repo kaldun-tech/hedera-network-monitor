@@ -13,7 +13,8 @@
       "Read(//home/kaldun/go/pkg/mod/**)",
       "Bash(git add:*)",
       "Bash(mkdir:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(./hmon alerts list:*)"
     ],
     "deny": [],
     "ask": []
