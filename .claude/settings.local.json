@@ -15,7 +15,8 @@
       "Bash(mkdir:*)",
       "Bash(mv:*)",
       "Bash(./hmon alerts list:*)",
-      "Bash(./hmon alerts add:*)"
+      "Bash(./hmon alerts add:*)",
+      "Bash(go tool cover:*)"
     ],
     "deny": [],
     "ask": []

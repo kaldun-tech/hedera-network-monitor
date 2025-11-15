@@ -1,0 +1,45 @@
+name: Go
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.21', '1.22']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Build monitor service
+      run: go build -v ./cmd/monitor
+
+    - name: Build CLI tool
+      run: go build -v ./cmd/hmon
+
+    - name: Format check
+      run: |
+        if [ -n "$(go fmt ./...)" ]; then
+          echo "Go code is not formatted:"
+          go fmt -d ./...
+          exit 1
+        fi
+
+    - name: Run tests with race detection
+      run: go test -v -race ./...
+
+    - name: Test coverage
+      run: go test -cover ./...

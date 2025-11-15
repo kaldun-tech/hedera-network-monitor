@@ -370,3 +370,69 @@ alerting:
 		t.Error("expected nil config for invalid configuration")
 	}
 }
+
+func TestValidate_AlertRule_NegativeCooldown(t *testing.T) {
+	rule := &AlertRule{
+		ID:              "test_rule_1",
+		Name:            "Test Rule",
+		MetricName:      "account_balance",
+		Condition:       "<",
+		Threshold:       1000000000,
+		Severity:        "warning",
+		CooldownSeconds: -1, // Invalid: negative cooldown
+	}
+
+	err := rule.Validate()
+	if err == nil {
+		t.Error("expected error for negative cooldown seconds")
+	}
+}
+
+func TestValidate_AlertRule_InvalidSeverity(t *testing.T) {
+	rule := &AlertRule{
+		ID:              "test_rule_1",
+		Name:            "Test Rule",
+		MetricName:      "account_balance",
+		Condition:       "<",
+		Threshold:       1000000000,
+		Severity:        "fatal", // Invalid: not in ["info", "warning", "critical"]
+		CooldownSeconds: 300,
+	}
+
+	err := rule.Validate()
+	if err == nil {
+		t.Error("expected error for invalid severity")
+	}
+}
+
+func TestValidate_AlertRule_InvalidCondition(t *testing.T) {
+	// This test verifies that AlertRule.Validate() returns an error
+	// when given an invalid Condition value.
+	// Valid conditions are: ">", "<", ">=", "<=", "==", "!=", "changed", "increased", "decreased"
+	// Test multiple invalid conditions to be thorough.
+	rule := &AlertRule{
+		ID:              "test_rule_1",
+		Name:            "Test Rule",
+		MetricName:      "account_balance",
+		Condition:       "+7",
+		Threshold:       1000000000,
+		Severity:        "info",
+		CooldownSeconds: 300,
+	}
+	err := rule.Validate()
+	if err == nil {
+		t.Error("expected error for invalid condition")
+	}
+
+	rule.Condition = ""
+	err = rule.Validate()
+	if err == nil {
+		t.Error("expected error for invalid condition")
+	}
+
+	rule.Condition = ">>"
+	err = rule.Validate()
+	if err == nil {
+		t.Error("expected error for invalid condition")
+	}
+}
