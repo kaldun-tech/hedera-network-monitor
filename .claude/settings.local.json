@@ -14,7 +14,8 @@
       "Bash(git add:*)",
       "Bash(mkdir:*)",
       "Bash(mv:*)",
-      "Bash(./hmon alerts list:*)"
+      "Bash(./hmon alerts list:*)",
+      "Bash(./hmon alerts add:*)"
     ],
     "deny": [],
     "ask": []
