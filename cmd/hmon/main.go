@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -156,24 +157,31 @@ var alertsListCmd = &cobra.Command{
 	Short: "List alert rules",
 	Long:  "Display all configured alert rules",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("Fetching alert rules...") // Query metrics from the monitoring service
-		fmt.Println("TODO: Implement alerts list")
-		return nil
+		return handleAlertsList()
 	},
 }
 
 // alertsAddCmd represents the alerts add command
 var alertsAddCmd = &cobra.Command{
-	Use:   "add <rule>",
+	Use:   "add <rule-json>",
 	Short: "Add new alert rule",
-	Long:  "Create a new alert rule (rule format: TBD)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Create a new alert rule.
+Rule must be provided as JSON with required fields:
+  - name: Rule name
+  - metric_name: Metric to monitor (e.g., "account_balance")
+  - condition: Comparison operator (>, <, >=, <=, ==, !=)
+  - threshold: Numeric threshold value
+  - severity: Alert severity (info, warning, critical)
+
+Optional fields:
+  - description: Rule description
+  - cooldown_seconds: Cooldown between alerts (default: 300)
+
+Example:
+  hmon alerts add '{"name":"Low Balance","metric_name":"account_balance","condition":"<","threshold":1000000000,"severity":"warning"}'`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: Implement alerts add
-		rule := args[0]
-		fmt.Printf("Adding alert rule: %s\n", rule)
-		fmt.Println("TODO: Implement alerts add")
-		return nil
+		return handleAlertAdd(args[0])
 	},
 }
 
@@ -256,6 +264,126 @@ func formatTransactions(transactions []hedera.Record) string {
 	}
 
 	return output
+}
+
+// AlertRuleResponse represents an alert rule from the API
+type AlertRuleResponse struct {
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	Description     string  `json:"description"`
+	MetricName      string  `json:"metric_name"`
+	Condition       string  `json:"condition"`
+	Threshold       float64 `json:"threshold"`
+	Severity        string  `json:"severity"`
+	Enabled         bool    `json:"enabled"`
+	CooldownSeconds int     `json:"cooldown_seconds"`
+}
+
+// AlertListResponse wraps alert rules
+type AlertListResponse struct {
+	Alerts []AlertRuleResponse `json:"alerts"`
+	Count  int                 `json:"count"`
+}
+
+// CreateAlertRequest is the request payload for creating an alert
+type CreateAlertRequest struct {
+	Name            string  `json:"name"`
+	Description     string  `json:"description"`
+	MetricName      string  `json:"metric_name"`
+	Condition       string  `json:"condition"`
+	Threshold       float64 `json:"threshold"`
+	Severity        string  `json:"severity"`
+	CooldownSeconds int     `json:"cooldown_seconds"`
+}
+
+// handleAlertsList fetches and displays all alert rules
+func handleAlertsList() error {
+	fullURL := fmt.Sprintf("%s/api/v1/alerts", apiURL)
+
+	resp, err := http.Get(fullURL)
+	if err != nil {
+		return fmt.Errorf("failed to query API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var response AlertListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Display results
+	if response.Count == 0 {
+		fmt.Println("No alert rules configured")
+		return nil
+	}
+
+	fmt.Printf("\nConfigured Alert Rules (%d):\n", response.Count)
+	fmt.Println("------------------------------------")
+
+	for i, rule := range response.Alerts {
+		fmt.Printf("\n[%d] %s\n", i+1, rule.Name)
+		fmt.Printf("    ID:              %s\n", rule.ID)
+		if rule.Description != "" {
+			fmt.Printf("    Description:     %s\n", rule.Description)
+		}
+		fmt.Printf("    Metric:          %s\n", rule.MetricName)
+		fmt.Printf("    Condition:       %s %.0f\n", rule.Condition, rule.Threshold)
+		fmt.Printf("    Severity:        %s\n", rule.Severity)
+		fmt.Printf("    Enabled:         %v\n", rule.Enabled)
+		if rule.CooldownSeconds > 0 {
+			fmt.Printf("    Cooldown:        %d seconds\n", rule.CooldownSeconds)
+		}
+	}
+
+	return nil
+}
+
+// handleAlertAdd creates a new alert rule
+func handleAlertAdd(ruleJSON string) error {
+	// Parse JSON into CreateAlertRequest
+	var request CreateAlertRequest
+	if err := json.Unmarshal([]byte(ruleJSON), &request); err != nil {
+		return fmt.Errorf("failed to parse rule JSON: %w (expected JSON format)", err)
+	}
+
+	// Make POST request to API
+	fullURL := fmt.Sprintf("%s/api/v1/alerts", apiURL)
+
+	body, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	resp, err := http.Post(fullURL, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return fmt.Errorf("failed to create alert: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var response AlertRuleResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	fmt.Println("\nAlert rule created successfully!")
+	fmt.Printf("ID:        %s\n", response.ID)
+	fmt.Printf("Name:      %s\n", response.Name)
+	fmt.Printf("Metric:    %s\n", response.MetricName)
+	fmt.Printf("Condition: %s %.0f\n", response.Condition, response.Threshold)
+	fmt.Printf("Severity:  %s\n", response.Severity)
+
+	return nil
 }
 
 func init() {
