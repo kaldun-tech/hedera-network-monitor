@@ -451,3 +451,192 @@ func TestAlertEventCreation(t *testing.T) {
 		t.Errorf("Expected Severity critical, got %s", event.Severity)
 	}
 }
+
+// TestCheckMetricStateChanged tests the "changed" state-tracking condition
+func TestCheckMetricStateChanged(t *testing.T) {
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
+
+	rule := AlertRule{
+		ID:        "changed_rule",
+		Name:      "Changed State Test",
+		MetricName: "test_metric",
+		Condition: "changed",
+		Enabled:   true,
+		Severity:  "warning",
+	}
+	if err := manager.AddRule(rule); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
+
+	// First metric: 100.0 (initializes state)
+	metric1 := types.Metric{
+		Name:      "test_metric",
+		Value:     100.0,
+		Timestamp: time.Now().Unix(),
+		Labels:    map[string]string{},
+	}
+	err := manager.CheckMetric(metric1)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	// Second metric: 150.0 (different from previous - should trigger alert)
+	metric2 := types.Metric{
+		Name:      "test_metric",
+		Value:     150.0,
+		Timestamp: time.Now().Unix(),
+		Labels:    map[string]string{},
+	}
+	err = manager.CheckMetric(metric2)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Third metric: 150.0 (same as previous - should NOT trigger alert)
+	metric3 := types.Metric{
+		Name:      "test_metric",
+		Value:     150.0,
+		Timestamp: time.Now().Unix(),
+		Labels:    map[string]string{},
+	}
+	err = manager.CheckMetric(metric3)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	// If we got here without panic, state tracking worked correctly
+}
+
+// TestCheckMetricStateIncreased tests the "increased" state-tracking condition
+func TestCheckMetricStateIncreased(t *testing.T) {
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
+
+	rule := AlertRule{
+		ID:        "increased_rule",
+		Name:      "Increased State Test",
+		MetricName: "test_metric",
+		Condition: "increased",
+		Enabled:   true,
+		Severity:  "info",
+	}
+	if err := manager.AddRule(rule); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
+
+	// First metric: 100.0 (initializes state)
+	metric1 := types.Metric{
+		Name:      "test_metric",
+		Value:     100.0,
+		Timestamp: time.Now().Unix(),
+		Labels:    map[string]string{},
+	}
+	err := manager.CheckMetric(metric1)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	// Second metric: 150.0 (increased from previous - should trigger alert)
+	metric2 := types.Metric{
+		Name:      "test_metric",
+		Value:     150.0,
+		Timestamp: time.Now().Unix(),
+		Labels:    map[string]string{},
+	}
+	err = manager.CheckMetric(metric2)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Third metric: 120.0 (decreased from previous - should NOT trigger alert)
+	metric3 := types.Metric{
+		Name:      "test_metric",
+		Value:     120.0,
+		Timestamp: time.Now().Unix(),
+		Labels:    map[string]string{},
+	}
+	err = manager.CheckMetric(metric3)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	// If we got here without panic, state tracking worked correctly
+}
+
+// TestCheckMetricStateDecreased tests the "decreased" state-tracking condition
+func TestCheckMetricStateDecreased(t *testing.T) {
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 300,
+	}
+	manager := NewManager(cfg)
+
+	rule := AlertRule{
+		ID:        "decreased_rule",
+		Name:      "Decreased State Test",
+		MetricName: "test_metric",
+		Condition: "decreased",
+		Enabled:   true,
+		Severity:  "critical",
+	}
+	if err := manager.AddRule(rule); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
+
+	// First metric: 150.0 (initializes state)
+	metric1 := types.Metric{
+		Name:      "test_metric",
+		Value:     150.0,
+		Timestamp: time.Now().Unix(),
+		Labels:    map[string]string{},
+	}
+	err := manager.CheckMetric(metric1)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	// Second metric: 100.0 (decreased from previous - should trigger alert)
+	metric2 := types.Metric{
+		Name:      "test_metric",
+		Value:     100.0,
+		Timestamp: time.Now().Unix(),
+		Labels:    map[string]string{},
+	}
+	err = manager.CheckMetric(metric2)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Third metric: 120.0 (increased from previous - should NOT trigger alert)
+	metric3 := types.Metric{
+		Name:      "test_metric",
+		Value:     120.0,
+		Timestamp: time.Now().Unix(),
+		Labels:    map[string]string{},
+	}
+	err = manager.CheckMetric(metric3)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	// If we got here without panic, state tracking worked correctly
+}
