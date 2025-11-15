@@ -26,7 +26,7 @@ type AlertEvent struct {
 }
 
 // EvaluateCondition checks if a metric value satisfies the rule condition
-func (r *AlertRule) EvaluateCondition(metricValue float64) bool {
+func (r *AlertRule) EvaluateCondition(metricValue float64, previousValue float64) bool {
 	switch r.Condition {
 	case ">":
 		return metricValue > r.Threshold
@@ -41,14 +41,11 @@ func (r *AlertRule) EvaluateCondition(metricValue float64) bool {
 	case "!=":
 		return metricValue != r.Threshold
 	case "changed":
-		// TODO: Implement state tracking - requires previous metric value
-		return false
+		return metricValue != previousValue
 	case "increased":
-		// TODO: Implement state tracking - requires previous metric value
-		return false
+		return metricValue > previousValue
 	case "decreased":
-		// TODO: Implement state tracking - requires previous metric value
-		return false
+		return metricValue < previousValue
 	default:
 		return false
 	}

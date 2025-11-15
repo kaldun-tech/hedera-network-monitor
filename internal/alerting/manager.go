@@ -18,6 +18,8 @@ type Manager struct {
 	alertQueue      chan AlertEvent
 	ruleMutex       sync.RWMutex
 	lastAlerts      map[string]time.Time // Track when we last alerted on each rule to avoid spam
+	lastMetrics     map[string]float64   // Maps rule ID to previously observed metric value
+	metricMutex     sync.Mutex
 	alertMutex      sync.Mutex
 	webhookConfig   WebhookConfig
 	defaultCooldown int
@@ -30,6 +32,7 @@ func NewManager(config config.AlertingConfig) *Manager {
 		webhooks:        config.Webhooks,
 		alertQueue:      make(chan AlertEvent, config.QueueBufferSize),
 		lastAlerts:      make(map[string]time.Time),
+		lastMetrics:     make(map[string]float64),
 		webhookConfig:   DefaultWebhookConfig(),
 		defaultCooldown: config.CooldownSeconds,
 	}
@@ -102,7 +105,11 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 		log.Printf("[AlertManager] Evaluating metric against rule: %s", rule.ID)
 
 		// Extract and compare to actual metric value
-		shouldAlert := rule.EvaluateCondition(metric.Value)
+		m.metricMutex.Lock()
+		previousValue := m.lastMetrics[rule.ID]
+		m.metricMutex.Unlock()
+
+		shouldAlert := rule.EvaluateCondition(metric.Value, previousValue)
 
 		if shouldAlert {
 			// Check if we recently alerted on this rule to avoid spam
@@ -140,6 +147,11 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 				log.Printf("[AlertManager] Alert queue full, dropping alert for rule %s", rule.ID)
 			}
 		}
+
+		// Update previousValue
+		m.metricMutex.Lock()
+		m.lastMetrics[rule.ID] = metric.Value
+		m.metricMutex.Unlock()
 	}
 
 	return nil
