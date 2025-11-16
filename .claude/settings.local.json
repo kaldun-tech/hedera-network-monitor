@@ -16,7 +16,8 @@
       "Bash(mv:*)",
       "Bash(./hmon alerts list:*)",
       "Bash(./hmon alerts add:*)",
-      "Bash(go tool cover:*)"
+      "Bash(go tool cover:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

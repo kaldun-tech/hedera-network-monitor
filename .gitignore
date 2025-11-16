@@ -1,6 +1,6 @@
-# Go binaries
-monitor
-hmon
+# Go binaries (root level only)
+/monitor
+/hmon
 *.exe
 *.exe~
 *.dll
