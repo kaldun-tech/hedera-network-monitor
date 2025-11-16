@@ -9,26 +9,26 @@ import (
 
 // MockClient implements the Client interface for testing
 type MockClient struct {
-	mockBalance           int64
-	mockInfo              *hiero.AccountInfo
-	mockRecords           []Record
-	mockReceipt           *hiero.TransactionReceipt
-	mockExpiry            int64
-	mockNodeAddressBook   *hiero.NodeAddressBook
-	mockBalanceErr        error
-	mockInfoErr           error
-	mockRecordsErr        error
-	mockReceiptErr        error
-	mockExpiryErr         error
-	mockNodeAddressBookErr error
-	mockCloseErr          error
-	getBalanceCalls       int
-	getInfoCalls          int
-	getRecordsCalls       int
-	getReceiptCalls       int
-	getExpiryCalls        int
+	mockBalance             int64
+	mockInfo                *hiero.AccountInfo
+	mockRecords             []Record
+	mockReceipt             *hiero.TransactionReceipt
+	mockExpiry              int64
+	mockNodeAddressBook     *hiero.NodeAddressBook
+	mockBalanceErr          error
+	mockInfoErr             error
+	mockRecordsErr          error
+	mockReceiptErr          error
+	mockExpiryErr           error
+	mockNodeAddressBookErr  error
+	mockCloseErr            error
+	getBalanceCalls         int
+	getInfoCalls            int
+	getRecordsCalls         int
+	getReceiptCalls         int
+	getExpiryCalls          int
 	getNodeAddressBookCalls int
-	closeCalls            int
+	closeCalls              int
 }
 
 func (m *MockClient) GetAccountBalance(accountID string) (int64, error) {
@@ -464,7 +464,6 @@ func BenchmarkGetAccountExpiry(b *testing.B) {
 		mock.GetAccountExpiry("0.0.5000")
 	}
 }
-
 
 // Integration-style tests (would need actual SDK setup)
 

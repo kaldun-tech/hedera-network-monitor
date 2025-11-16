@@ -19,40 +19,40 @@ type Config struct {
 
 // NetworkConfig contains Hedera network configuration
 type NetworkConfig struct {
-	Name        string `mapstructure:"name"` // "mainnet" or "testnet"
-	OperatorID  string `mapstructure:"operator_id"` // "0.0.3"
+	Name        string `mapstructure:"name"`         // "mainnet" or "testnet"
+	OperatorID  string `mapstructure:"operator_id"`  // "0.0.3"
 	OperatorKey string `mapstructure:"operator_key"` // Private key for operator account
 }
 
 // AlertingConfig contains alert configuration
 type AlertingConfig struct {
-	Enabled         bool `mapstructure:"enabled"`
-	Webhooks        []string `mapstructure:"webhooks"` // Webhook URLs for notifications
+	Enabled         bool        `mapstructure:"enabled"`
+	Webhooks        []string    `mapstructure:"webhooks"` // Webhook URLs for notifications
 	Rules           []AlertRule `mapstructure:"rules"`
-	CooldownSeconds int `mapstructure:"cooldown_seconds"` // Default cooldown for all rules (seconds)
-	QueueBufferSize int `mapstructure:"queue_buffer_size"` // Alert queue buffer size (default: 100)
+	CooldownSeconds int         `mapstructure:"cooldown_seconds"`  // Default cooldown for all rules (seconds)
+	QueueBufferSize int         `mapstructure:"queue_buffer_size"` // Alert queue buffer size (default: 100)
 }
 
 // AlertRule represents an alert configuration
 type AlertRule struct {
-	ID              string `mapstructure:"id"`
-	Name            string `mapstructure:"name"`
-	MetricName      string `mapstructure:"metric_name"`
-	Condition       string `mapstructure:"condition"`
+	ID              string  `mapstructure:"id"`
+	Name            string  `mapstructure:"name"`
+	MetricName      string  `mapstructure:"metric_name"`
+	Condition       string  `mapstructure:"condition"`
 	Threshold       float64 `mapstructure:"threshold"`
-	Severity        string `mapstructure:"severity"`
-	CooldownSeconds int `mapstructure:"cooldown_seconds"` // Optional: override default cooldown (0 = use AlertingConfig default)
+	Severity        string  `mapstructure:"severity"`
+	CooldownSeconds int     `mapstructure:"cooldown_seconds"` // Optional: override default cooldown (0 = use AlertingConfig default)
 }
 
 // APIConfig contains API server configuration
 type APIConfig struct {
-	Port int `mapstructure:"port"` // Port to listen on
+	Port int    `mapstructure:"port"` // Port to listen on
 	Host string `mapstructure:"host"` // Host to bind to
 }
 
 // LoggingConfig contains logging configuration
 type LoggingConfig struct {
-	Level  string `mapstructure:"level"` // "debug", "info", "warn", "error"
+	Level  string `mapstructure:"level"`  // "debug", "info", "warn", "error"
 	Format string `mapstructure:"format"` // "json" or "text"
 }
 

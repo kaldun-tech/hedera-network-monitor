@@ -43,13 +43,13 @@ func TestAddRule(t *testing.T) {
 	manager := NewManager(cfg)
 
 	rule := AlertRule{
-		ID:       "test_rule_1",
-		Name:     "Test Rule",
+		ID:         "test_rule_1",
+		Name:       "Test Rule",
 		MetricName: "test_metric",
-		Condition: ">",
-		Threshold: 100.0,
-		Enabled:   true,
-		Severity: "warning",
+		Condition:  ">",
+		Threshold:  100.0,
+		Enabled:    true,
+		Severity:   "warning",
 	}
 
 	err := manager.AddRule(rule)
@@ -170,13 +170,13 @@ func TestCheckMetricThresholdGreaterThan(t *testing.T) {
 	manager := NewManager(cfg)
 
 	rule := AlertRule{
-		ID:        "gt_rule",
-		Name:      "Greater Than Test",
+		ID:         "gt_rule",
+		Name:       "Greater Than Test",
 		MetricName: "test_metric",
-		Condition: ">",
-		Threshold: 100.0,
-		Enabled:   true,
-		Severity:  "warning",
+		Condition:  ">",
+		Threshold:  100.0,
+		Enabled:    true,
+		Severity:   "warning",
 	}
 	if err := manager.AddRule(rule); err != nil {
 		t.Fatalf("AddRule failed: %v", err)
@@ -184,10 +184,10 @@ func TestCheckMetricThresholdGreaterThan(t *testing.T) {
 
 	// Test metric value above threshold
 	metric := types.Metric{
-		Name:  "test_metric",
-		Value: 150.0,
+		Name:      "test_metric",
+		Value:     150.0,
 		Timestamp: time.Now().Unix(),
-		Labels: map[string]string{},
+		Labels:    map[string]string{},
 	}
 
 	err := manager.CheckMetric(metric)
@@ -213,23 +213,23 @@ func TestCheckMetricThresholdLessThan(t *testing.T) {
 	manager := NewManager(cfg)
 
 	rule := AlertRule{
-		ID:        "lt_rule",
-		Name:      "Less Than Test",
+		ID:         "lt_rule",
+		Name:       "Less Than Test",
 		MetricName: "test_metric",
-		Condition: "<",
-		Threshold: 50.0,
-		Enabled:   true,
-		Severity:  "critical",
+		Condition:  "<",
+		Threshold:  50.0,
+		Enabled:    true,
+		Severity:   "critical",
 	}
 	if err := manager.AddRule(rule); err != nil {
 		t.Fatalf("AddRule failed: %v", err)
 	}
 
 	metric := types.Metric{
-		Name:  "test_metric",
-		Value: 25.0,
+		Name:      "test_metric",
+		Value:     25.0,
 		Timestamp: time.Now().Unix(),
-		Labels: map[string]string{},
+		Labels:    map[string]string{},
 	}
 
 	err := manager.CheckMetric(metric)
@@ -249,23 +249,23 @@ func TestCheckMetricThresholdEqual(t *testing.T) {
 	manager := NewManager(cfg)
 
 	rule := AlertRule{
-		ID:        "eq_rule",
-		Name:      "Equal Test",
+		ID:         "eq_rule",
+		Name:       "Equal Test",
 		MetricName: "test_metric",
-		Condition: "==",
-		Threshold: 100.0,
-		Enabled:   true,
-		Severity:  "info",
+		Condition:  "==",
+		Threshold:  100.0,
+		Enabled:    true,
+		Severity:   "info",
 	}
 	if err := manager.AddRule(rule); err != nil {
 		t.Fatalf("AddRule failed: %v", err)
 	}
 
 	metric := types.Metric{
-		Name:  "test_metric",
-		Value: 100.0,
+		Name:      "test_metric",
+		Value:     100.0,
 		Timestamp: time.Now().Unix(),
-		Labels: map[string]string{},
+		Labels:    map[string]string{},
 	}
 
 	err := manager.CheckMetric(metric)
@@ -285,23 +285,23 @@ func TestCheckMetricDisabledRule(t *testing.T) {
 	manager := NewManager(cfg)
 
 	rule := AlertRule{
-		ID:        "disabled_rule",
-		Name:      "Disabled Test",
+		ID:         "disabled_rule",
+		Name:       "Disabled Test",
 		MetricName: "test_metric",
-		Condition: ">",
-		Threshold: 50.0,
-		Enabled:   false, // Disabled
-		Severity:  "warning",
+		Condition:  ">",
+		Threshold:  50.0,
+		Enabled:    false, // Disabled
+		Severity:   "warning",
 	}
 	if err := manager.AddRule(rule); err != nil {
 		t.Fatalf("AddRule failed: %v", err)
 	}
 
 	metric := types.Metric{
-		Name:  "test_metric",
-		Value: 100.0, // Value that would trigger if rule was enabled
+		Name:      "test_metric",
+		Value:     100.0, // Value that would trigger if rule was enabled
 		Timestamp: time.Now().Unix(),
-		Labels: map[string]string{},
+		Labels:    map[string]string{},
 	}
 
 	err := manager.CheckMetric(metric)
@@ -329,23 +329,23 @@ func TestCheckMetricNoMatch(t *testing.T) {
 	manager := NewManager(cfg)
 
 	rule := AlertRule{
-		ID:        "rule1",
-		Name:      "Test Rule",
+		ID:         "rule1",
+		Name:       "Test Rule",
 		MetricName: "different_metric",
-		Condition: ">",
-		Threshold: 100.0,
-		Enabled:   true,
-		Severity:  "warning",
+		Condition:  ">",
+		Threshold:  100.0,
+		Enabled:    true,
+		Severity:   "warning",
 	}
 	if err := manager.AddRule(rule); err != nil {
 		t.Fatalf("AddRule failed: %v", err)
 	}
 
 	metric := types.Metric{
-		Name:  "test_metric",
-		Value: 150.0,
+		Name:      "test_metric",
+		Value:     150.0,
 		Timestamp: time.Now().Unix(),
-		Labels: map[string]string{},
+		Labels:    map[string]string{},
 	}
 
 	err := manager.CheckMetric(metric)
@@ -374,23 +374,23 @@ func TestCheckMetricCooldown(t *testing.T) {
 	manager := NewManager(cfg)
 
 	rule := AlertRule{
-		ID:        "spam_rule",
-		Name:      "Spam Test",
+		ID:         "spam_rule",
+		Name:       "Spam Test",
 		MetricName: "test_metric",
-		Condition: ">",
-		Threshold: 50.0,
-		Enabled:   true,
-		Severity:  "warning",
+		Condition:  ">",
+		Threshold:  50.0,
+		Enabled:    true,
+		Severity:   "warning",
 	}
 	if err := manager.AddRule(rule); err != nil {
 		t.Fatalf("AddRule failed: %v", err)
 	}
 
 	metric := types.Metric{
-		Name:  "test_metric",
-		Value: 100.0,
+		Name:      "test_metric",
+		Value:     100.0,
 		Timestamp: time.Now().Unix(),
-		Labels: map[string]string{},
+		Labels:    map[string]string{},
 	}
 
 	// First call should complete without error and queue an alert
@@ -463,12 +463,12 @@ func TestCheckMetricStateChanged(t *testing.T) {
 	manager := NewManager(cfg)
 
 	rule := AlertRule{
-		ID:        "changed_rule",
-		Name:      "Changed State Test",
+		ID:         "changed_rule",
+		Name:       "Changed State Test",
 		MetricName: "test_metric",
-		Condition: "changed",
-		Enabled:   true,
-		Severity:  "warning",
+		Condition:  "changed",
+		Enabled:    true,
+		Severity:   "warning",
 	}
 	if err := manager.AddRule(rule); err != nil {
 		t.Fatalf("AddRule failed: %v", err)
@@ -526,12 +526,12 @@ func TestCheckMetricStateIncreased(t *testing.T) {
 	manager := NewManager(cfg)
 
 	rule := AlertRule{
-		ID:        "increased_rule",
-		Name:      "Increased State Test",
+		ID:         "increased_rule",
+		Name:       "Increased State Test",
 		MetricName: "test_metric",
-		Condition: "increased",
-		Enabled:   true,
-		Severity:  "info",
+		Condition:  "increased",
+		Enabled:    true,
+		Severity:   "info",
 	}
 	if err := manager.AddRule(rule); err != nil {
 		t.Fatalf("AddRule failed: %v", err)
@@ -589,12 +589,12 @@ func TestCheckMetricStateDecreased(t *testing.T) {
 	manager := NewManager(cfg)
 
 	rule := AlertRule{
-		ID:        "decreased_rule",
-		Name:      "Decreased State Test",
+		ID:         "decreased_rule",
+		Name:       "Decreased State Test",
 		MetricName: "test_metric",
-		Condition: "decreased",
-		Enabled:   true,
-		Severity:  "critical",
+		Condition:  "decreased",
+		Enabled:    true,
+		Severity:   "critical",
 	}
 	if err := manager.AddRule(rule); err != nil {
 		t.Fatalf("AddRule failed: %v", err)
