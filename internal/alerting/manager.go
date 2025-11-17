@@ -74,7 +74,7 @@ func (m *Manager) GetRules() []AlertRule {
 }
 
 // formatMetricId Create a metric ID by concatenating the labels
-func formatMetricId(alert AlertEvent, metric types.Metric) {
+func formatMetricId(alert *AlertEvent, metric types.Metric) {
 	// Simple approach: name + account_id (if present)
 	accountID := metric.Labels["account_id"]
 	if accountID != "" {
@@ -83,6 +83,29 @@ func formatMetricId(alert AlertEvent, metric types.Metric) {
 		alert.MetricID = metric.Name
 	}
 	// Output: "account_balance[0.0.5000]"
+}
+
+// queueAlert creates and queues the alert
+func (m *Manager) queueAlert(rule AlertRule, metric types.Metric) {
+	// Create and queue the alert
+	alert := AlertEvent{
+		RuleID:    rule.ID,
+		RuleName:  rule.Name,
+		Severity:  rule.Severity,
+		Message:   rule.Description,
+		Timestamp: time.Now().Unix(),
+		Value:     metric.Value,
+	}
+	formatMetricId(&alert, metric)
+
+	select {
+	case m.alertQueue <- alert:
+		m.alertMutex.Lock()
+		m.lastAlerts[rule.ID] = time.Now()
+		m.alertMutex.Unlock()
+	default:
+		log.Printf("[AlertManager] Alert queue full, dropping alert for rule %s", rule.ID)
+	}
 }
 
 // CheckMetric evaluates a metric against all active rules
@@ -127,25 +150,7 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 				continue
 			}
 
-			// Create and queue the alert
-			alert := AlertEvent{
-				RuleID:    rule.ID,
-				RuleName:  rule.Name,
-				Severity:  rule.Severity,
-				Message:   rule.Description,
-				Timestamp: time.Now().Unix(),
-				Value:     metric.Value,
-			}
-			formatMetricId(alert, metric)
-
-			select {
-			case m.alertQueue <- alert:
-				m.alertMutex.Lock()
-				m.lastAlerts[rule.ID] = time.Now()
-				m.alertMutex.Unlock()
-			default:
-				log.Printf("[AlertManager] Alert queue full, dropping alert for rule %s", rule.ID)
-			}
+			m.queueAlert(rule, metric)
 		}
 
 		// Update previousValue

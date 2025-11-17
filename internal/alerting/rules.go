@@ -43,7 +43,7 @@ func (r *AlertRule) EvaluateCondition(metricValue float64, previousValue float64
 	case "changed":
 		return metricValue != previousValue
 	case "increased":
-		return metricValue > previousValue
+		return previousValue < metricValue
 	case "decreased":
 		return metricValue < previousValue
 	default:
