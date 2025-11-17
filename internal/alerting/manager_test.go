@@ -197,9 +197,15 @@ func TestCheckMetricThresholdGreaterThan(t *testing.T) {
 
 	// Allow time for async alert processing
 	time.Sleep(100 * time.Millisecond)
-
-	// We can't directly check the queue without modifying the manager,
-	// but we can verify the method completes without error
+	// Verify alert was queued
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "gt_rule" {
+			t.Errorf("Expected alert for greater than, got %s", alert.RuleID)
+		}
+	default:
+		t.Fatal("Expected first alert to be queued")
+	}
 }
 
 // TestCheckMetricThresholdLessThan tests condition evaluation with <
@@ -235,6 +241,284 @@ func TestCheckMetricThresholdLessThan(t *testing.T) {
 	err := manager.CheckMetric(metric)
 	if err != nil {
 		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	// Allow time for async alert processing
+	time.Sleep(100 * time.Millisecond)
+	// Verify alert was queued
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "lt_rule" {
+			t.Errorf("Expected alert for less than, got %s", alert.RuleID)
+		}
+	default:
+		t.Fatal("Expected first alert to be queued")
+	}
+}
+
+// TestCheckMetricThresholdGreaterThanEqual tests condition evaluation with >=
+func TestCheckMetricThresholdGreaterThanEqual(t *testing.T) {
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 0,
+	}
+	manager := NewManager(cfg)
+
+	rule := AlertRule{
+		ID:              "gte_rule",
+		Name:            "Greater Than Equal Test",
+		Description:     "Alert when metric >= 100",
+		MetricName:      "test_metric",
+		Condition:       ">=",
+		Threshold:       100.0,
+		Enabled:         true,
+		Severity:        "warning",
+		CooldownSeconds: 0,
+	}
+	if err := manager.AddRule(rule); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
+
+	// Test metric below threshold, should not alert
+	metric := types.Metric{
+		Name:      "test_metric",
+		Value:     75.0,
+		Timestamp: time.Now().Unix(),
+		Labels:    map[string]string{},
+	}
+
+	err := manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		t.Errorf("Unexpected alert with ID %s", alert.RuleID)
+	default:
+		t.Log("No alert was queued as expected")
+	}
+
+	// Test metric value equal to threshold - should trigger alert
+	metric.Value = 100.0
+	metric.Timestamp = time.Now().Unix()
+	beforeTime := time.Now().Unix()
+
+	err = manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "gte_rule" {
+			t.Errorf("Expected RuleID gte_rule, got %s", alert.RuleID)
+		}
+		if alert.Severity != "warning" {
+			t.Errorf("Expected severity warning, got %s", alert.Severity)
+		}
+		if alert.Value != 100.0 {
+			t.Errorf("Expected value 100.0, got %f", alert.Value)
+		}
+		if alert.Timestamp < beforeTime || alert.Timestamp > time.Now().Unix() {
+			t.Errorf("Alert timestamp %d out of expected range", alert.Timestamp)
+		}
+	default:
+		t.Fatal("Expected first alert to be queued")
+	}
+
+	// Test metric value greater than threshold - should trigger alert
+	metric.Value = 150.0
+	metric.Timestamp = time.Now().Unix()
+	beforeTime = time.Now().Unix()
+
+	err = manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "gte_rule" {
+			t.Errorf("Expected RuleID gte_rule, got %s", alert.RuleID)
+		}
+		if alert.Severity != "warning" {
+			t.Errorf("Expected severity warning, got %s", alert.Severity)
+		}
+		if alert.Value != 150.0 {
+			t.Errorf("Expected value 150.0, got %f", alert.Value)
+		}
+		if alert.Timestamp < beforeTime || alert.Timestamp > time.Now().Unix() {
+			t.Errorf("Alert timestamp %d out of expected range", alert.Timestamp)
+		}
+	default:
+		t.Fatal("Expected second alert to be queued")
+	}
+
+	// Test with account_id label - verify MetricID is formatted correctly
+	metric.Value = 125.0
+	metric.Timestamp = time.Now().Unix()
+	metric.Labels = map[string]string{"account_id": "0.0.5000"}
+	beforeTime = time.Now().Unix()
+
+	err = manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "gte_rule" {
+			t.Errorf("Expected RuleID gte_rule, got %s", alert.RuleID)
+		}
+		if alert.Severity != "warning" {
+			t.Errorf("Expected severity warning, got %s", alert.Severity)
+		}
+		if alert.Value != 125.0 {
+			t.Errorf("Expected value 125.0, got %f", alert.Value)
+		}
+		if alert.MetricID != "test_metric[0.0.5000]" {
+			t.Errorf("Expected MetricID test_metric[0.0.5000], got %s", alert.MetricID)
+		}
+	default:
+		t.Fatal("Expected third alert to be queued")
+	}
+}
+
+// TestCheckMetricThresholdLessThanEqualTo tests condition evaluation with <=
+func TestCheckMetricThresholdLessThanEqualTo(t *testing.T) {
+	cfg := config.AlertingConfig{
+		Enabled:         true,
+		Webhooks:        []string{},
+		QueueBufferSize: 100,
+		CooldownSeconds: 0,
+	}
+	manager := NewManager(cfg)
+
+	rule := AlertRule{
+		ID:              "lte_rule",
+		Name:            "Less Than Equal Test",
+		Description:     "Alert when metric <= 50",
+		MetricName:      "test_metric",
+		Condition:       "<=",
+		Threshold:       50.0,
+		Enabled:         true,
+		Severity:        "critical",
+		CooldownSeconds: 0,
+	}
+	if err := manager.AddRule(rule); err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
+
+	// Test metric less than threshold - should trigger alert
+	metric := types.Metric{
+		Name:      "test_metric",
+		Value:     25.0,
+		Timestamp: time.Now().Unix(),
+		Labels:    map[string]string{},
+	}
+
+	err := manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "lte_rule" {
+			t.Errorf("Expected RuleID lte_rule, got %s", alert.RuleID)
+		}
+		if alert.Severity != "critical" {
+			t.Errorf("Expected severity critical, got %s", alert.Severity)
+		}
+		if alert.Value != 25.0 {
+			t.Errorf("Expected value 25.0, got %f", alert.Value)
+		}
+	default:
+		t.Fatal("Expected first alert to be queued")
+	}
+
+	// Test metric value equal to threshold - should trigger alert
+	metric.Value = 50.0
+	metric.Timestamp = time.Now().Unix()
+	beforeTime := time.Now().Unix()
+
+	err = manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "lte_rule" {
+			t.Errorf("Expected RuleID lte_rule, got %s", alert.RuleID)
+		}
+		if alert.Severity != "critical" {
+			t.Errorf("Expected severity critical, got %s", alert.Severity)
+		}
+		if alert.Value != 50.0 {
+			t.Errorf("Expected value 50.0, got %f", alert.Value)
+		}
+		if alert.Timestamp < beforeTime || alert.Timestamp > time.Now().Unix() {
+			t.Errorf("Alert timestamp %d out of expected range", alert.Timestamp)
+		}
+	default:
+		t.Fatal("Expected second alert to be queued")
+	}
+
+	// Test metric value greater than threshold - should NOT trigger alert
+	metric.Value = 100.0
+	metric.Timestamp = time.Now().Unix()
+
+	err = manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		t.Errorf("Unexpected alert with ID %s (metric value exceeded threshold)", alert.RuleID)
+	default:
+		t.Log("No alert was queued as expected")
+	}
+
+	// Test with account_id label - verify MetricID is formatted correctly
+	metric.Value = 30.0
+	metric.Timestamp = time.Now().Unix()
+	metric.Labels = map[string]string{"account_id": "0.0.7000"}
+	beforeTime = time.Now().Unix()
+
+	err = manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "lte_rule" {
+			t.Errorf("Expected RuleID lte_rule, got %s", alert.RuleID)
+		}
+		if alert.Severity != "critical" {
+			t.Errorf("Expected severity critical, got %s", alert.Severity)
+		}
+		if alert.Value != 30.0 {
+			t.Errorf("Expected value 30.0, got %f", alert.Value)
+		}
+		if alert.MetricID != "test_metric[0.0.7000]" {
+			t.Errorf("Expected MetricID test_metric[0.0.7000], got %s", alert.MetricID)
+		}
+	default:
+		t.Fatal("Expected fourth alert to be queued")
 	}
 }
 
@@ -272,6 +556,18 @@ func TestCheckMetricThresholdEqual(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CheckMetric failed: %v", err)
 	}
+
+	// Allow time for async alert processing
+	time.Sleep(100 * time.Millisecond)
+	// Verify alert was queued
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "eq_rule" {
+			t.Errorf("Expected alert for equals, got %s", alert.RuleID)
+		}
+	default:
+		t.Fatal("Expected first alert to be queued")
+	}
 }
 
 // TestCheckMetricDisabledRule tests that disabled rules are skipped
@@ -308,6 +604,9 @@ func TestCheckMetricDisabledRule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CheckMetric failed: %v", err)
 	}
+
+	// Allow time for async alert processing
+	time.Sleep(100 * time.Millisecond)
 
 	// Verify no alert was queued (queue should still be empty)
 	select {
@@ -353,6 +652,9 @@ func TestCheckMetricNoMatch(t *testing.T) {
 		t.Fatalf("CheckMetric failed: %v", err)
 	}
 
+	// Allow time for async alert processing
+	time.Sleep(100 * time.Millisecond)
+
 	// Rule applies to different metric name, so no alert
 	select {
 	case <-manager.alertQueue:
@@ -363,7 +665,6 @@ func TestCheckMetricNoMatch(t *testing.T) {
 }
 
 // TestCheckMetricCooldown tests that cooldown prevents alert spam
-// NOTE: This test will be fully functional once condition evaluation is implemented
 func TestCheckMetricCooldown(t *testing.T) {
 	cfg := config.AlertingConfig{
 		Enabled:         true,
@@ -498,7 +799,16 @@ func TestCheckMetricStateChanged(t *testing.T) {
 		t.Fatalf("CheckMetric failed: %v", err)
 	}
 
+	// Verify first alert was queued
 	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "changed_rule" {
+			t.Errorf("Expected alert for changed, got %s", alert.RuleID)
+		}
+	default:
+		t.Fatal("Expected first alert to be queued")
+	}
 
 	// Third metric: 150.0 (same as previous - should NOT trigger alert)
 	metric3 := types.Metric{
@@ -511,8 +821,16 @@ func TestCheckMetricStateChanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CheckMetric failed: %v", err)
 	}
-
 	// If we got here without panic, state tracking worked correctly
+
+	// Check second alert was not queued
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		t.Fatalf("Unexpected second alert with ID %s", alert.RuleID)
+	default:
+		t.Log("Second alert was correctly not queued")
+	}
 }
 
 // TestCheckMetricStateIncreased tests the "increased" state-tracking condition
@@ -561,7 +879,16 @@ func TestCheckMetricStateIncreased(t *testing.T) {
 		t.Fatalf("CheckMetric failed: %v", err)
 	}
 
+	// Verify first alert was queued
 	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "increased_rule" {
+			t.Errorf("Expected alert for increased, got %s", alert.RuleID)
+		}
+	default:
+		t.Fatal("Expected first alert to be queued")
+	}
 
 	// Third metric: 120.0 (decreased from previous - should NOT trigger alert)
 	metric3 := types.Metric{
@@ -576,6 +903,14 @@ func TestCheckMetricStateIncreased(t *testing.T) {
 	}
 
 	// If we got here without panic, state tracking worked correctly
+	// Verify second alert was not triggered
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		t.Errorf("Unexpected second alert with ID %s", alert.RuleID)
+	default:
+		t.Log("Second alert was correctly not queued")
+	}
 }
 
 // TestCheckMetricStateDecreased tests the "decreased" state-tracking condition
@@ -624,7 +959,16 @@ func TestCheckMetricStateDecreased(t *testing.T) {
 		t.Fatalf("CheckMetric failed: %v", err)
 	}
 
+	// Verify first alert was queued
 	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		if alert.RuleID != "decreased_rule" {
+			t.Errorf("Expected alert for decreased, got %s", alert.RuleID)
+		}
+	default:
+		t.Fatal("Expected first alert to be queued")
+	}
 
 	// Third metric: 120.0 (increased from previous - should NOT trigger alert)
 	metric3 := types.Metric{
@@ -639,4 +983,12 @@ func TestCheckMetricStateDecreased(t *testing.T) {
 	}
 
 	// If we got here without panic, state tracking worked correctly
+	// Verify second alert was not triggered
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case alert := <-manager.alertQueue:
+		t.Errorf("Unexpected second alert with ID %s", alert.RuleID)
+	default:
+		t.Log("Second alert was correctly not queued")
+	}
 }

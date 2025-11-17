@@ -18,6 +18,11 @@ func TestEvaluateCondition_GreaterThan(t *testing.T) {
 		t.Error("expected > condition to be true for 150 > 100")
 	}
 
+	// Test: 100 > 100 (false)
+	if rule.EvaluateCondition(100.0, 0) {
+		t.Error("expected > condition to be false for 100 > 100")
+	}
+
 	// Test: 50 > 100 (false)
 	if rule.EvaluateCondition(50.0, 0) {
 		t.Error("expected > condition to be false for 50 > 100")
@@ -38,9 +43,104 @@ func TestEvaluateCondition_LessThan(t *testing.T) {
 		t.Error("expected < condition to be true for 50 < 100")
 	}
 
+	// Test: 100 < 100 (false)
+	if rule.EvaluateCondition(100.0, 0) {
+		t.Error("expected < condition to be false for 100 < 100")
+	}
+
 	// Test: 150 < 100 (false)
 	if rule.EvaluateCondition(150.0, 0) {
 		t.Error("expected < condition to be false for 150 < 100")
+	}
+}
+
+// TestEvaluateCondition_GreaterThanOrEqual tests the >= condition
+func TestEvaluateCondition_GreaterThanOrEqual(t *testing.T) {
+	rule := &AlertRule{
+		ID:        "gte_rule",
+		Name:      "Greater Than Or Equal Test",
+		Condition: ">=",
+		Threshold: 100.0,
+	}
+
+	// Test: 150 >= 100 (true)
+	if !rule.EvaluateCondition(150.0, 0) {
+		t.Error("expected >= condition to be true for 150 >= 100")
+	}
+
+	// Test: 100 >= 100 (true) - This is the key difference from >
+	if !rule.EvaluateCondition(100.0, 0) {
+		t.Error("expected >= condition to be true for 100 >= 100")
+	}
+
+	// Test: 50 >= 100 (false)
+	if rule.EvaluateCondition(50.0, 0) {
+		t.Error("expected >= condition to be false for 50 >= 100")
+	}
+}
+
+// TestEvaluateCondition_LessThanOrEqual tests the <= condition
+func TestEvaluateCondition_LessThanOrEqual(t *testing.T) {
+	rule := &AlertRule{
+		ID:        "lte_rule",
+		Name:      "Less Than Or Equal Test",
+		Condition: "<=",
+		Threshold: 100.0,
+	}
+
+	// Test: 50 <= 100 (true)
+	if !rule.EvaluateCondition(50.0, 0) {
+		t.Error("expected <= condition to be true for 50 <= 100")
+	}
+
+	// Test: 100 <= 100 (true) - This is the key difference from <
+	if !rule.EvaluateCondition(100.0, 0) {
+		t.Error("expected <= condition to be true for 100 <= 100")
+	}
+
+	// Test: 150 <= 100 (false)
+	if rule.EvaluateCondition(150.0, 0) {
+		t.Error("expected <= condition to be false for 150 <= 100")
+	}
+}
+
+// TestEvaluateCondition_Equal tests the == condition
+func TestEvaluateCondition_Equal(t *testing.T) {
+	rule := &AlertRule{
+		ID:        "eq_rule",
+		Name:      "Equal Test",
+		Condition: "==",
+		Threshold: 100.0,
+	}
+
+	// Test: 100 == 100 (true)
+	if !rule.EvaluateCondition(100.0, 0) {
+		t.Error("expected == condition to be true for 100 == 100")
+	}
+
+	// Test: 150 == 100 (false)
+	if rule.EvaluateCondition(150.0, 0) {
+		t.Error("expected == condition to be false for 150 == 100")
+	}
+}
+
+// TestEvaluateCondition_NotEqual tests the != condition
+func TestEvaluateCondition_NotEqual(t *testing.T) {
+	rule := &AlertRule{
+		ID:        "ne_rule",
+		Name:      "Not Equal Test",
+		Condition: "!=",
+		Threshold: 100.0,
+	}
+
+	// Test: 150 != 100 (true)
+	if !rule.EvaluateCondition(150.0, 0) {
+		t.Error("expected != condition to be true for 150 != 100")
+	}
+
+	// Test: 100 != 100 (false)
+	if rule.EvaluateCondition(100.0, 0) {
+		t.Error("expected != condition to be false for 100 != 100")
 	}
 }
 
@@ -123,45 +223,5 @@ func TestEvaluateCondition_Decreased(t *testing.T) {
 	// Test 4: Decrease to zero (50 -> 0)
 	if !rule.EvaluateCondition(0.0, 50.0) {
 		t.Error("expected decreased condition to be true when decreasing to zero")
-	}
-}
-
-// TestEvaluateCondition_Equal tests the == condition
-func TestEvaluateCondition_Equal(t *testing.T) {
-	rule := &AlertRule{
-		ID:        "eq_rule",
-		Name:      "Equal Test",
-		Condition: "==",
-		Threshold: 100.0,
-	}
-
-	// Test: 100 == 100 (true)
-	if !rule.EvaluateCondition(100.0, 0) {
-		t.Error("expected == condition to be true for 100 == 100")
-	}
-
-	// Test: 150 == 100 (false)
-	if rule.EvaluateCondition(150.0, 0) {
-		t.Error("expected == condition to be false for 150 == 100")
-	}
-}
-
-// TestEvaluateCondition_NotEqual tests the != condition
-func TestEvaluateCondition_NotEqual(t *testing.T) {
-	rule := &AlertRule{
-		ID:        "ne_rule",
-		Name:      "Not Equal Test",
-		Condition: "!=",
-		Threshold: 100.0,
-	}
-
-	// Test: 150 != 100 (true)
-	if !rule.EvaluateCondition(150.0, 0) {
-		t.Error("expected != condition to be true for 150 != 100")
-	}
-
-	// Test: 100 != 100 (false)
-	if rule.EvaluateCondition(100.0, 0) {
-		t.Error("expected != condition to be false for 100 != 100")
 	}
 }
