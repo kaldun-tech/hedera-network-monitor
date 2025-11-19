@@ -32,7 +32,7 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	// Initialize components
-	hederaClient, err := hedera.NewClient(cfg.Network.Name)
+	hederaClient, err := hedera.NewClient(cfg.Network.Name, cfg.Network.OperatorID, cfg.Network.OperatorKey)
 	if err != nil {
 		log.Fatalf("Failed to create Hedera client: %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
 	"github.com/kaldun-tech/hedera-network-monitor/pkg/config"
 )
@@ -27,8 +28,28 @@ type Manager struct {
 
 // NewManager creates a new alert manager
 func NewManager(config config.AlertingConfig) *Manager {
+	// Convert config rules to alerting rules
+	rules := make([]AlertRule, len(config.Rules))
+	for i, cfgRule := range config.Rules {
+		rules[i] = AlertRule{
+			// Use ID from config if available, will be set below if empty
+			ID:              cfgRule.ID,
+			Name:            cfgRule.Name,
+			MetricName:      cfgRule.MetricName,
+			Condition:       cfgRule.Condition,
+			Threshold:       cfgRule.Threshold,
+			Severity:        cfgRule.Severity,
+			Enabled:         true, // Rules are enabled by default
+			CooldownSeconds: cfgRule.CooldownSeconds,
+		}
+		// Generate ID if not provided in config
+		if rules[i].ID == "" {
+			rules[i].ID = uuid.New().String()
+		}
+	}
+
 	return &Manager{
-		rules:           make([]AlertRule, 0),
+		rules:           rules,
 		webhooks:        config.Webhooks,
 		alertQueue:      make(chan AlertEvent, config.QueueBufferSize),
 		lastAlerts:      make(map[string]time.Time),

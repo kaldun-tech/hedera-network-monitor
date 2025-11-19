@@ -10,7 +10,7 @@ network:
   # Format: "shard.realm.account" (e.g., "0.0.2")
   operator_id: "0.0.1234"
 
-  # Operator account private key
+  # Operator account DER encrypted private key
   # This is required for authentication with the Hedera network
   # WARNING: Do NOT commit private keys to version control!
   # Use environment variables or a secure vault in production

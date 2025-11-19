@@ -50,20 +50,25 @@ type HederaClient struct {
 }
 
 // NewClient creates a new Hedera SDK client wrapper
-func NewClient(network string) (Client, error) {
+// operatorID and operatorKey can come from config file or environment variables
+func NewClient(network, operatorID, operatorKey string) (Client, error) {
 	log.Printf("Creating Hedera client for network: %s", network)
 	client, err := hiero.ClientForName(network)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
 
-	// Get operator credentials from environment
-	operatorID := os.Getenv("OPERATOR_ID")
-	operatorKey := os.Getenv("OPERATOR_KEY")
+	// Use provided credentials, fallback to environment variables
+	if operatorID == "" {
+		operatorID = os.Getenv("OPERATOR_ID")
+	}
+	if operatorKey == "" {
+		operatorKey = os.Getenv("OPERATOR_KEY")
+	}
 
-	// Validate environment variables
+	// Validate credentials
 	if operatorID == "" || operatorKey == "" {
-		return nil, fmt.Errorf("OPERATOR_ID and OPERATOR_KEY environment variables required")
+		return nil, fmt.Errorf("OPERATOR_ID and OPERATOR_KEY must be provided in config file or environment variables")
 	}
 
 	// Parse credentials
