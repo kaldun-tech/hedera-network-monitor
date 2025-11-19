@@ -22,7 +22,6 @@ type MockStorage struct {
 	deleteOldErr   error
 	closeErr       error
 	statsErr       error
-	supportsStats  bool
 }
 
 // MockAlertManager is a mock implementation of the AlertManager interface for testing

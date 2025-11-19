@@ -212,7 +212,11 @@ func (hc *HederaClient) GetAccountExpiry(accountID string) (int64, error) {
 // GetNodeAddressBook implements Client interface
 func (hc *HederaClient) GetNodeAddressBook() (*hiero.NodeAddressBook, error) {
 	log.Println("Querying node address book")
-	query := hiero.NewAddressBookQuery().SetMaxAttempts(5)
+	// Address book is stored in file 0.0.102 on all Hedera networks
+	addressBookFileID, _ := hiero.FileIDFromString("0.0.102")
+	query := hiero.NewAddressBookQuery().
+		SetFileID(addressBookFileID).
+		SetMaxAttempts(5)
 	addressBook, err := query.Execute(hc.client)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving address book query: %w", err)

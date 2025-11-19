@@ -125,7 +125,7 @@ func TestSendWebhookRequestNonSuccessStatus(t *testing.T) {
 		if attempts < 3 {
 			// First two attempts fail with 500
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Server error"))
+			_, _ = w.Write([]byte("Server error"))
 		} else {
 			// Third attempt succeeds
 			w.WriteHeader(http.StatusOK)

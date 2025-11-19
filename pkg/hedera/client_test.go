@@ -150,7 +150,7 @@ func TestGetAccountInfo_ValidAccountID(t *testing.T) {
 	}
 
 	if info == nil {
-		t.Error("expected info to not be nil")
+		t.Fatal("expected info to not be nil")
 	}
 
 	if info.AccountID.Account != 5000 {
@@ -395,7 +395,7 @@ func BenchmarkGetAccountBalance(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		mock.GetAccountBalance("0.0.5000")
+		_, _ = mock.GetAccountBalance("0.0.5000")
 	}
 }
 
@@ -408,7 +408,7 @@ func BenchmarkGetAccountInfo(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		mock.GetAccountInfo("0.0.5000")
+		_, _ = mock.GetAccountInfo("0.0.5000")
 	}
 }
 
@@ -419,7 +419,7 @@ func BenchmarkGetNodeAddressBook(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		mock.GetNodeAddressBook()
+		_, _ = mock.GetNodeAddressBook()
 	}
 }
 
@@ -438,7 +438,7 @@ func BenchmarkGetAccountRecords(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		mock.GetAccountRecords("0.0.5000", 10)
+		_, _ = mock.GetAccountRecords("0.0.5000", 10)
 	}
 }
 
@@ -451,7 +451,7 @@ func BenchmarkGetTransactionReceipt(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		mock.GetTransactionReceipt("0.0.5000-1234567890-000000")
+		_, _ = mock.GetTransactionReceipt("0.0.5000-1234567890-000000")
 	}
 }
 
@@ -461,7 +461,7 @@ func BenchmarkGetAccountExpiry(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		mock.GetAccountExpiry("0.0.5000")
+		_, _ = mock.GetAccountExpiry("0.0.5000")
 	}
 }
 

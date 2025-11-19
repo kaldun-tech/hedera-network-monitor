@@ -364,7 +364,6 @@ func TestCheckMetricThresholdGreaterThanEqual(t *testing.T) {
 	metric.Value = 125.0
 	metric.Timestamp = time.Now().Unix()
 	metric.Labels = map[string]string{"account_id": "0.0.5000"}
-	beforeTime = time.Now().Unix()
 
 	err = manager.CheckMetric(metric)
 	if err != nil {
@@ -495,7 +494,6 @@ func TestCheckMetricThresholdLessThanEqualTo(t *testing.T) {
 	metric.Value = 30.0
 	metric.Timestamp = time.Now().Unix()
 	metric.Labels = map[string]string{"account_id": "0.0.7000"}
-	beforeTime = time.Now().Unix()
 
 	err = manager.CheckMetric(metric)
 	if err != nil {

@@ -20,7 +20,7 @@ func mustStoreMetric(t *testing.T, storage *MemoryStorage, metric types.Metric) 
 func TestNewMemoryStorage(t *testing.T) {
 	storage := NewMemoryStorage()
 	if storage == nil {
-		t.Error("expected non-nil storage")
+		t.Fatal("expected non-nil storage")
 	}
 	if storage.maxSize != DefaultMaxSize {
 		t.Errorf("expected default max size %d, got %d", DefaultMaxSize, storage.maxSize)
@@ -303,10 +303,13 @@ func TestDeleteOldMetrics_All(t *testing.T) {
 func TestClose(t *testing.T) {
 	storage := NewMemoryStorage()
 
-	storage.StoreMetric(types.Metric{Name: "metric_a", Timestamp: 1, Value: 1.0, Labels: map[string]string{}})
+	err := storage.StoreMetric(types.Metric{Name: "metric_a", Timestamp: 1, Value: 1.0, Labels: map[string]string{}})
+	if err != nil {
+		t.Fatalf("failed to store metric: %v", err)
+	}
 
 	// Close should succeed
-	err := storage.Close()
+	err = storage.Close()
 	if err != nil {
 		t.Errorf("expected no error closing storage, got: %v", err)
 	}

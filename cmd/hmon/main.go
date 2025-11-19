@@ -5,19 +5,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 
+	"github.com/kaldun-tech/hedera-network-monitor/pkg/config"
 	"github.com/kaldun-tech/hedera-network-monitor/pkg/hedera"
 	"github.com/spf13/cobra"
 )
 
 var (
 	// Global flags
-	apiURL   string
-	loglevel string
-	network  string
+	apiURL     string
+	loglevel   string
+	network    string
+	configFile string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -54,7 +57,8 @@ var accountBalanceCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		accountID := args[0]
 		fmt.Printf("Querying balance for account: %s\n", accountID)
-		client, err := hedera.NewClient(getNetworkName())
+		operatorID, operatorKey := getCredentials()
+		client, err := hedera.NewClient(getNetworkName(), operatorID, operatorKey)
 		if err != nil {
 			return err
 		}
@@ -78,7 +82,8 @@ var accountTransactionsCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		accountID := args[0]
 		fmt.Printf("Querying transactions for account: %s\n", accountID)
-		client, err := hedera.NewClient(getNetworkName())
+		operatorID, operatorKey := getCredentials()
+		client, err := hedera.NewClient(getNetworkName(), operatorID, operatorKey)
 		if err != nil {
 			return err
 		}
@@ -194,6 +199,24 @@ func getNetworkName() string {
 	}
 	// Fallback to default
 	return "testnet"
+}
+
+// getCredentials loads credentials from config file or environment variables
+func getCredentials() (operatorID, operatorKey string) {
+	// Try to load from config file first
+	if configFile != "" {
+		cfg, err := config.Load(configFile)
+		if err != nil {
+			log.Printf("Failed to load config from %s: %v. Falling back to environment variables.", configFile, err)
+		} else if cfg != nil {
+			return cfg.Network.OperatorID, cfg.Network.OperatorKey
+		}
+	}
+
+	// Fall back to environment variables
+	operatorID = os.Getenv("OPERATOR_ID")
+	operatorKey = os.Getenv("OPERATOR_KEY")
+	return operatorID, operatorKey
 }
 
 // MetricResponse defines types for API queries
@@ -390,8 +413,8 @@ func init() {
 	// Add persistent flags
 	rootCmd.PersistentFlags().StringVar(&apiURL, "api-url", "http://localhost:8080", "API server URL")
 	rootCmd.PersistentFlags().StringVar(&loglevel, "loglevel", "info", "Log level (debug, info, warn, error)")
-
-	rootCmd.PersistentFlags().StringVar(&network, "network", "", "Hedera network name (mainnet/testnet), defaults to NETWORK_NAME in .env or testnet")
+	rootCmd.PersistentFlags().StringVar(&configFile, "config", "config/config.yaml", "Path to config file (for loading operator credentials)")
+	rootCmd.PersistentFlags().StringVar(&network, "network", "", "Hedera network name (mainnet/testnet), defaults to config or NETWORK_NAME env var or testnet")
 
 	// Add command groups
 	rootCmd.AddCommand(accountCmd)

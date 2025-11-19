@@ -80,10 +80,7 @@ func SendWebhookRequest(webhookURL string, payload WebhookPayload, config Webhoo
 			// Read and discard response body to close connection
 			_, _ = io.ReadAll(resp.Body)
 			log.Printf("[AlertManager] Webhook sent successfully to %s (status: %d)", webhookURL, resp.StatusCode)
-			err = resp.Body.Close()
-			if err != nil {
-				lastErr = err
-			}
+			_ = resp.Body.Close()
 			return nil
 		}
 

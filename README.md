@@ -492,6 +492,56 @@ make test-coverage
 2. Add to `config.example.yaml` with documentation
 3. Load in configuration parsing logic
 
+### Testing Alert System with Real Metrics
+
+The `testgen` tool generates Hedera transactions to test the alert system with real metric flows:
+
+**Build the test generator:**
+```bash
+go build -o testgen ./cmd/testgen
+```
+
+**Generate test transactions:**
+```bash
+# Basic usage (sends 5 transactions with 5 second intervals)
+./testgen --config config/config.yaml
+
+# Custom parameters
+./testgen \
+  --config config/config.yaml \
+  --from 0.0.5000 \
+  --to 0.0.5001 \
+  --count 10 \
+  --interval 3 \
+  --amount 500000
+
+# Flags:
+#   -config string      Path to config file (default: config/config.yaml)
+#   -from string         Account to send from (default: first monitored account)
+#   -to string           Account to send to (default: second monitored account)
+#   -count int           Number of transactions (default: 5)
+#   -interval int        Seconds between transactions (default: 5)
+#   -amount int64        Amount in tinybar (default: 1000000, ~0.01 HBAR)
+#   -network string      Override network (mainnet/testnet)
+```
+
+**Complete alert testing workflow:**
+1. Start the monitor service: `./monitor --config config/config.yaml`
+2. In another terminal, run testgen: `./testgen --config config/config.yaml`
+   - testgen sends from your operator account TO your monitored accounts
+   - This generates activity on the monitored accounts (which are what the alerts watch)
+3. Watch monitor logs for metric collection and alert evaluation
+4. Query metrics with CLI: `./hmon account balance 0.0.5000`
+5. Check alert rules firing: `./hmon alerts list`
+
+**Important:** testgen transfers FROM your operator account (you have the private key) TO your monitored accounts. You don't need private keys for the monitored accounts.
+
+**Testing specific alerts:**
+- **Low Balance Alert**: Run testgen to send HBAR TO an account; balance changes trigger evaluation
+- **High Transaction Rate**: Run testgen with `-count 20 -interval 2` to send many transactions quickly
+- **No Recent Transactions**: Run testgen, then wait without sending more transactions
+- **Network Unavailable**: Depends on testnet state (hard to trigger manually)
+
 ## Contributing
 
 We welcome contributions! Please:

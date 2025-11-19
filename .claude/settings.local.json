@@ -17,7 +17,9 @@
       "Bash(./hmon alerts list:*)",
       "Bash(./hmon alerts add:*)",
       "Bash(go tool cover:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(./hmon account balance:*)",
+      "Bash(./scripts/check-offline.sh:*)"
     ],
     "deny": [],
     "ask": []

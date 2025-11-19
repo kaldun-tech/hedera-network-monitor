@@ -146,7 +146,7 @@ func (c *Config) Validate() error {
 	}
 
 	// Account IDs must be valid format. At least one account must be configured for monitoring
-	if c.Accounts == nil || len(c.Accounts) == 0 {
+	if len(c.Accounts) == 0 {
 		return fmt.Errorf("no accounts configured")
 	}
 

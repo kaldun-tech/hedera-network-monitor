@@ -216,7 +216,7 @@ func TestLoad_MissingFile_ReturnsDefaults(t *testing.T) {
 	}
 
 	if config == nil {
-		t.Error("expected default config to be returned")
+		t.Fatal("expected default config to be returned")
 	}
 
 	if config.Network.Name != "testnet" {
@@ -323,12 +323,10 @@ network:
 
 	// The current implementation returns defaults on parse failure with a warning
 	// This test verifies that behavior
-	if err != nil {
-		// Error is acceptable but not required
-	}
+	_ = err // Error is acceptable but not required
 
 	if config == nil {
-		t.Error("expected config to not be nil (should return defaults on parse failure)")
+		t.Fatal("expected config to not be nil (should return defaults on parse failure)")
 	}
 
 	if config.Network.Name != "testnet" {
