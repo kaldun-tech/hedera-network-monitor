@@ -110,3 +110,131 @@ func TestWebhookPayloadJSONKeys(t *testing.T) {
 		}
 	}
 }
+
+// TestSendWebhookRequest_SuccessOnFirstAttempt tests webhook succeeds immediately
+func TestSendWebhookRequest_SuccessOnFirstAttempt(t *testing.T) {
+	// TODO: Implement this test
+	// 1. Create httptest.Server that returns 200 OK
+	// 2. Create WebhookPayload
+	// 3. Call SendWebhookRequest() with test server URL
+	// 4. Verify error is nil
+	// 5. Verify server was called exactly once
+	t.Skip("Implement webhook success on first attempt test")
+}
+
+// TestSendWebhookRequest_RetryOnServerError tests webhook retries on 5xx errors
+func TestSendWebhookRequest_RetryOnServerError(t *testing.T) {
+	// TODO: Implement this test
+	// 1. Create server that fails first 2 requests with 503 (Service Unavailable)
+	// 2. On 3rd attempt, server returns 200 OK
+	// 3. Create config with MaxRetries: 5
+	// 4. Call SendWebhookRequest()
+	// 5. Verify error is nil (retry succeeded)
+	// 6. Verify server was called exactly 3 times
+	// Learning: Count HTTP requests to verify retry behavior
+	t.Skip("Implement webhook retry on server error test")
+}
+
+// TestSendWebhookRequest_RetryOnNetworkError tests webhook retries on network failures
+func TestSendWebhookRequest_RetryOnNetworkError(t *testing.T) {
+	// TODO: Implement this test
+	// 1. Create server that works but use a URL that doesn't exist or timeout
+	// 2. Configure very short timeout (e.g., 1ms)
+	// 3. Call SendWebhookRequest()
+	// 4. Verify error is returned after all retries exhausted
+	// 5. Verify multiple attempts were made
+	// Learning: Network errors should trigger retries
+	t.Skip("Implement webhook retry on network error test")
+}
+
+// TestSendWebhookRequest_ExhaustedRetries tests webhook gives up after max retries
+func TestSendWebhookRequest_ExhaustedRetries(t *testing.T) {
+	// TODO: Implement this test
+	// 1. Create server that always returns 500 Internal Server Error
+	// 2. Create config with MaxRetries: 2 (so 3 total attempts)
+	// 3. Call SendWebhookRequest()
+	// 4. Verify error is returned
+	// 5. Verify error message mentions retry count
+	// 6. Verify server was called exactly 3 times (initial + 2 retries)
+	t.Skip("Implement webhook exhausted retries test")
+}
+
+// TestSendWebhookRequest_ExponentialBackoff tests backoff increases exponentially
+func TestSendWebhookRequest_ExponentialBackoff(t *testing.T) {
+	// TODO: Implement this test
+	// 1. Create server that fails 3 times then succeeds
+	// 2. Track request timestamps
+	// 3. Call SendWebhookRequest()
+	// 4. Verify timing between attempts follows exponential backoff
+	//    - Attempt 1->2: should wait ~InitialBackoff
+	//    - Attempt 2->3: should wait ~InitialBackoff * 2
+	//    - Attempt 3->4: should wait ~InitialBackoff * 4
+	// Learning: Backoff = min(initialBackoff * 2^attempt, maxBackoff)
+	t.Skip("Implement webhook exponential backoff test")
+}
+
+// TestSendWebhookRequest_MaxBackoffCap tests backoff respects maximum
+func TestSendWebhookRequest_MaxBackoffCap(t *testing.T) {
+	// TODO: Implement this test
+	// 1. Create config with:
+	//    - InitialBackoff: 1 second
+	//    - MaxBackoff: 5 seconds
+	// 2. Create server that fails many times
+	// 3. Track request timing
+	// 4. Verify backoff never exceeds MaxBackoff (5 seconds)
+	// 5. Verify it caps at the max (e.g., 5s) and doesn't keep doubling
+	t.Skip("Implement webhook max backoff cap test")
+}
+
+// TestSendWebhookRequest_TimeoutConfig tests custom timeout is respected
+func TestSendWebhookRequest_TimeoutConfig(t *testing.T) {
+	// TODO: Implement this test
+	// 1. Create server that takes 2 seconds to respond
+	// 2. Create config with Timeout: 100ms
+	// 3. Call SendWebhookRequest()
+	// 4. Verify error is returned quickly (within 500ms + retry backoff)
+	// 5. Verify timeout error indicates request timed out
+	t.Skip("Implement webhook timeout config test")
+}
+
+// TestSendWebhookRequest_Redirect tests webhook handles HTTP redirects
+func TestSendWebhookRequest_Redirect(t *testing.T) {
+	// TODO: Implement this test
+	// 1. Create primary server that returns 301 redirect
+	// 2. Create redirect target server that returns 200 OK
+	// 3. Call SendWebhookRequest() with primary URL
+	// 4. Verify no error (HTTP client follows redirects by default)
+	// 5. Verify final server received the webhook payload
+	t.Skip("Implement webhook redirect handling test")
+}
+
+// TestSendWebhookRequest_InvalidURL tests webhook handles bad URLs
+func TestSendWebhookRequest_InvalidURL(t *testing.T) {
+	// TODO: Implement this test
+	// 1. Call SendWebhookRequest() with invalid URL (e.g., "not-a-url")
+	// 2. Verify error is returned
+	// 3. Verify error indicates invalid URL
+	// 4. Verify no retries are attempted (error is immediate)
+	t.Skip("Implement webhook invalid URL test")
+}
+
+// TestSendWebhookRequest_ContentType tests webhook sets correct headers
+func TestSendWebhookRequest_ContentType(t *testing.T) {
+	// TODO: Implement this test
+	// 1. Create server that validates request headers
+	// 2. Verify Content-Type is "application/json"
+	// 3. Verify User-Agent is "hedera-network-monitor/1.0"
+	// 4. Call SendWebhookRequest()
+	// 5. Verify no error and headers were correct
+	t.Skip("Implement webhook content type test")
+}
+
+// TestSendWebhookRequest_ResponseBodyRead tests response body is properly closed
+func TestSendWebhookRequest_ResponseBodyRead(t *testing.T) {
+	// TODO: Implement this test
+	// 1. Create server that returns response with body
+	// 2. Call SendWebhookRequest()
+	// 3. Verify no resource leaks (response body should be read and closed)
+	// Learning: io.ReadAll + resp.Body.Close() prevents leaks
+	t.Skip("Implement webhook response body read test")
+}
