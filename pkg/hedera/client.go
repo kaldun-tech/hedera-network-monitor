@@ -10,6 +10,7 @@ import (
 
 // TinybarPerHbar is the conversion constant: 1 HBAR = 100,000,000 tinybar
 const TinybarPerHbar = 100_000_000
+const getAddressBookMaxAttempts = 5
 
 // Record represents a transaction record for an account
 type Record struct {
@@ -216,7 +217,7 @@ func (hc *HederaClient) GetNodeAddressBook() (*hiero.NodeAddressBook, error) {
 	addressBookFileID, _ := hiero.FileIDFromString("0.0.102")
 	query := hiero.NewAddressBookQuery().
 		SetFileID(addressBookFileID).
-		SetMaxAttempts(5)
+		SetMaxAttempts(getAddressBookMaxAttempts)
 	addressBook, err := query.Execute(hc.client)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving address book query: %w", err)
