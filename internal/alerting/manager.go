@@ -215,6 +215,7 @@ func (m *Manager) sendWebhook(webhookURL string, alert AlertEvent) {
 		Message:   alert.Message,
 		Value:     alert.Value,
 		Timestamp: alert.Timestamp,
+		MetricID:  alert.MetricID,
 	}
 
 	err := SendWebhookRequest(webhookURL, payload, m.webhookConfig)

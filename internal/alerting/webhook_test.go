@@ -15,6 +15,7 @@ func TestWebhookPayloadCreation(t *testing.T) {
 		Message:   "CPU usage exceeded 90%",
 		Value:     95.5,
 		Timestamp: time.Now().Unix(),
+		MetricID:  "cpu_usage",
 	}
 
 	if payload.RuleID != "rule_123" {
@@ -28,6 +29,10 @@ func TestWebhookPayloadCreation(t *testing.T) {
 	if payload.Value != 95.5 {
 		t.Errorf("Expected Value 95.5, got %f", payload.Value)
 	}
+
+	if payload.MetricID != "cpu_usage" {
+		t.Errorf("Expected MetricID cpu_usage, got %s", payload.MetricID)
+	}
 }
 
 // TestWebhookPayloadJSON tests that webhook payload marshals to JSON correctly
@@ -39,6 +44,7 @@ func TestWebhookPayloadJSON(t *testing.T) {
 		Message:   "Memory usage below 10%",
 		Value:     8.2,
 		Timestamp: 1234567890,
+		MetricID:  "memory_usage",
 	}
 
 	// Marshal to JSON
@@ -78,6 +84,10 @@ func TestWebhookPayloadJSON(t *testing.T) {
 	if unm.Timestamp != payload.Timestamp {
 		t.Errorf("Timestamp mismatch: %d != %d", unm.Timestamp, payload.Timestamp)
 	}
+
+	if unm.MetricID != payload.MetricID {
+		t.Errorf("MetricID mismatch: %s != %s", unm.MetricID, payload.MetricID)
+	}
 }
 
 // TestWebhookPayloadJSONKeys tests that JSON keys match expected format
@@ -89,6 +99,7 @@ func TestWebhookPayloadJSONKeys(t *testing.T) {
 		Message:   "Test message",
 		Value:     42.0,
 		Timestamp: 1000000000,
+		MetricID:  "test_metric",
 	}
 
 	data, err := json.Marshal(payload)
@@ -103,7 +114,7 @@ func TestWebhookPayloadJSONKeys(t *testing.T) {
 		t.Fatalf("Failed to unmarshal as map: %v", err)
 	}
 
-	expectedKeys := []string{"rule_id", "rule_name", "severity", "message", "value", "timestamp"}
+	expectedKeys := []string{"rule_id", "rule_name", "severity", "message", "value", "timestamp", "metric_id"}
 	for _, key := range expectedKeys {
 		if _, exists := jsonMap[key]; !exists {
 			t.Errorf("Expected key %s not found in JSON", key)

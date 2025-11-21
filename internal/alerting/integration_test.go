@@ -38,16 +38,7 @@ func TestEndToEndAlertDispatchSingleRule(t *testing.T) {
 	}
 
 	// Start alert processor
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	// manager.Run() runs in a loop and returns when context is done
-	// 1. Always provide a timeout context - Otherwise it runs forever
-	//  2. Expect it to return context.Cancelled or context.DeadlineExceeded - This is normal/expected
-	//  3. Don't treat it as a test failure - It's how you clean up the goroutine
-	errChan := make(chan error, 1)
-	go func() {
-		errChan <- manager.Run(ctx)
-	}()
+	_, _, errChan := startAlertProcessor(manager, 2*time.Second)
 
 	// Send metric via CheckMetric() that triggers the rule alert
 	metric := types.Metric{
@@ -85,124 +76,608 @@ func TestEndToEndAlertDispatchSingleRule(t *testing.T) {
 
 // TestEndToEndAlertDispatchMultipleRules tests alert dispatch with multiple rules
 func TestEndToEndAlertDispatchMultipleRules(t *testing.T) {
-	// TODO: Implement this test
-	// Similar to above but:
-	// 1. Add multiple alert rules (e.g., >, <, ==, changed)
-	// 2. Send metric values that trigger multiple rules
-	// 3. Verify all webhooks were called with correct payloads
-	// 4. Test that each webhook receives separate calls
-	t.Skip("Implement multiple rule alert dispatch test")
+	// Create mock server that captures webhook calls
+	server, webhookCalls := captureWebhookCalls(t)
+	defer server.Close()
+
+	// Create AlertManager with mock webhook URL
+	cfg := config.AlertingConfig{
+		Webhooks: []string{server.URL},
+	}
+	// Add multiple alert rules (e.g., >, <, ==, changed)
+	manager := NewManager(cfg)
+	// Add >
+	err := manager.AddRule(AlertRule{
+		ID:         "gt_rule",
+		Name:       "High Value",
+		MetricName: "test_metric",
+		Condition:  ">",
+		Threshold:  100,
+		Enabled:    true,
+	})
+	if err != nil {
+		t.Fatalf("Failed to add rule: %v", err)
+	}
+	// Add <
+	err = manager.AddRule(AlertRule{
+		ID:         "lt_rule",
+		Name:       "Low Value",
+		MetricName: "test_metric",
+		Condition:  "<",
+		Threshold:  50,
+		Enabled:    true,
+	})
+	if err != nil {
+		t.Fatalf("Failed to add rule: %v", err)
+	}
+	// Add changed
+	err = manager.AddRule(AlertRule{
+		ID:         "changed_rule",
+		Name:       "Changed",
+		MetricName: "test_metric",
+		Condition:  "changed",
+		Enabled:    true,
+	})
+	if err != nil {
+		t.Fatalf("Failed to add rule: %v", err)
+	}
+
+	// Start alert processor
+	_, _, errChan := startAlertProcessor(manager, 2*time.Second)
+
+	// Send metric values that trigger only greater than > and changed rules
+	metric := types.Metric{
+		Name:  "test_metric",
+		Value: 150.0,
+	}
+	err = manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	// Wait for webhook to be called
+	time.Sleep(100 * time.Millisecond)
+
+	// Wait for Run() to return
+	err = <-errChan
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Unexpected error from Run(): %v", err)
+	}
+
+	// Verify webhooks 1 and 3 were called with correct payloads
+	if len(*webhookCalls) != 2 {
+		t.Fatalf("Expected 2 webhook call, got %d", len(*webhookCalls))
+	}
+
+	ruleIDs := map[string]bool{}
+	for _, call := range *webhookCalls {
+		ruleIDs[call.RuleID] = true
+	}
+
+	if !ruleIDs["rule1"] {
+		t.Error("Expected rule1 (>) to trigger")
+	}
+	if !ruleIDs["rule3"] {
+		t.Error("Expected rule3 (changed) to trigger")
+	}
+	if ruleIDs["rule2"] {
+		t.Error("Expected rule2 (<) NOT to trigger")
+	}
 }
 
 // TestEndToEndAlertWithCooldown tests cooldown prevents duplicate webhook calls
 func TestEndToEndAlertWithCooldown(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create manager with short cooldown (e.g., 100ms)
-	// 2. Add alert rule
-	// 3. Send first metric that triggers alert
-	// 4. Verify webhook called once
-	// 5. Send second metric within cooldown period
-	// 6. Verify webhook NOT called (only 1 total call still)
-	// 7. Wait for cooldown to expire
-	// 8. Send third metric
-	// 9. Verify webhook called again (2 total calls now)
-	t.Skip("Implement cooldown webhook prevention test")
+	// Create mock server that captures webhook calls
+	server, webhookCalls := captureWebhookCalls(t)
+	defer server.Close()
+
+	// Create AlertManager with mock webhook URL and a short cooldown
+	cfg := config.AlertingConfig{
+		CooldownSeconds: 1,
+		Webhooks:        []string{server.URL},
+	}
+	manager := NewManager(cfg)
+	// Add alert rule
+	err := manager.AddRule(AlertRule{
+		ID:         "test_rule",
+		MetricName: "test_metric",
+		Condition:  ">",
+		Threshold:  100,
+		Enabled:    true,
+	})
+	if err != nil {
+		t.Fatalf("Failed to add rule: %v", err)
+	}
+
+	// Start alert processor
+	_, cancel, errChan := startAlertProcessor(manager, 5*time.Second)
+	defer cancel()
+
+	// Send first metric that triggers alert
+	sendMetricAndVerifyWebhooks(t, manager, 150.0, 100*time.Millisecond, 1, nil, webhookCalls)
+
+	// Send second metric within cooldown period (no additional alert)
+	sendMetricAndVerifyWebhooks(t, manager, 200.0, 0, 1, nil, webhookCalls)
+
+	// Wait for cooldown to expire (1.1 seconds to be safe)
+	time.Sleep(1100 * time.Millisecond)
+
+	// Send third metric after cooldown expires (triggers alert again)
+	sendMetricAndVerifyWebhooks(t, manager, 250.0, 100*time.Millisecond, 2, nil, webhookCalls)
+
+	// Verify both payloads are correct
+	if (*webhookCalls)[0].Value != 150.0 {
+		t.Errorf("First call: expected value 150.0, got %f", (*webhookCalls)[0].Value)
+	}
+	if (*webhookCalls)[1].Value != 250.0 {
+		t.Errorf("Second call: expected value 250.0, got %f", (*webhookCalls)[1].Value)
+	}
+
+	// Clean up: wait for processor to finish
+	err = <-errChan
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Unexpected error from Run(): %v", err)
+	}
 }
 
 // TestEndToEndWebhookPayloadFormat tests the webhook receives correct JSON structure
 func TestEndToEndWebhookPayloadFormat(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create server that captures webhook request body
-	// 2. Add alert rule with specific values
-	// 3. Send metric that triggers alert
-	// 4. Verify webhook received payload with:
-	//    - Correct RuleID
-	//    - Correct RuleName
-	//    - Correct Severity
-	//    - Correct Value
-	//    - Valid Timestamp
-	//    - Correct Message
-	t.Skip("Implement webhook payload format test")
+	// Create mock server that captures webhook calls
+	server, webhookCalls := captureWebhookCalls(t)
+	defer server.Close()
+
+	// Create AlertManager with mock webhook URL
+	cfg := config.AlertingConfig{
+		Webhooks: []string{server.URL},
+	}
+	manager := NewManager(cfg)
+	err := manager.AddRule(AlertRule{
+		ID:          "format_test_rule",
+		Name:        "Format Test Alert",
+		Description: "Testing webhook payload format",
+		MetricName:  "test_metric",
+		Condition:   ">",
+		Threshold:   100,
+		Enabled:     true,
+		Severity:    "critical",
+	})
+	if err != nil {
+		t.Fatalf("Failed to add rule: %v", err)
+	}
+
+	// Start alert processor
+	_, cancel, errChan := startAlertProcessor(manager, 2*time.Second)
+	defer cancel()
+
+	// Capture the time before sending metric
+	beforeTime := time.Now().Unix()
+
+	// Send metric that triggers alert
+	sendMetricAndVerifyWebhooks(t, manager, 150.0, 100*time.Millisecond,
+		1, nil, webhookCalls)
+
+	// Capture the time after webhook was received
+	afterTime := time.Now().Unix()
+
+	// Verify webhook received payload with:
+	//    - Correct RuleID: "format_test_rule"
+	//    - Correct RuleName: "Format Test Alert"
+	//    - Correct Severity: "critical"
+	//    - Correct Value: match the metric value
+	//    - Valid Timestamp: is set and reasonable
+	//    - Correct Message: "Testing webhook payload format"
+	payload := (*webhookCalls)[0]
+	if payload.RuleID != "format_test_rule" {
+		t.Errorf("Expected RuleID format_test_rule, got %s", payload.RuleID)
+	}
+	if payload.RuleName != "Format Test Alert" {
+		t.Errorf("Expected RuleName Format Test Alert, got %s", payload.RuleName)
+	}
+	if payload.Severity != "critical" {
+		t.Errorf("Expected Severity critical, got %s", payload.Severity)
+	}
+	if payload.Value != 150.0 {
+		t.Errorf("Expected value 150.0, got %f", payload.Value)
+	}
+	if payload.Timestamp < beforeTime {
+		t.Errorf("Timestamp %d is before alert was sent (%d)", payload.Timestamp, beforeTime)
+	}
+	if payload.Timestamp > afterTime {
+		t.Errorf("Timestamp %d is in the future (now is %d)", payload.Timestamp, afterTime)
+	}
+	if payload.Message != "Testing webhook payload format" {
+		t.Errorf("Expected Message Testing webhook payload format, got %s", payload.Message)
+	}
+
+	// Clean up
+	err = <-errChan
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Unexpected error from Run(): %v", err)
+	}
 }
 
 // TestEndToEndAlertWithLabels tests alerts work with labeled metrics
 func TestEndToEndAlertWithLabels(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Add alert rule for a metric
-	// 2. Send metric with labels (e.g., account_id: "0.0.5000")
-	// 3. Verify alert.MetricID includes the label (e.g., "metric_name[0.0.5000]")
-	// 4. Verify webhook receives MetricID in payload
-	t.Skip("Implement alert with labels test")
+	// Create mock server that captures webhook calls
+	server, webhookCalls := captureWebhookCalls(t)
+	defer server.Close()
+
+	// Create AlertManager with mock webhook URL
+	cfg := config.AlertingConfig{
+		Webhooks: []string{server.URL},
+	}
+	manager := NewManager(cfg)
+	err := manager.AddRule(AlertRule{
+		ID:         "labeled_rule",
+		Name:       "Labeled Rule Test",
+		MetricName: "account_balance",
+		Condition:  ">",
+		Threshold:  1000000,
+		Enabled:    true,
+		Severity:   "info",
+	})
+	if err != nil {
+		t.Fatalf("Failed to add rule: %v", err)
+	}
+
+	// Start alert processor
+	_, cancel, errChan := startAlertProcessor(manager, 2*time.Second)
+	defer cancel()
+
+	// Send metric with labels (e.g., account_id: "0.0.5000")
+	labels := map[string]string{
+		"account_id": "0.0.5000",
+	}
+	sendMetricAndVerifyWebhooks(t, manager, 1500000.0, 100*time.Millisecond,
+		1, labels, webhookCalls)
+
+	// Verify alert.MetricID includes the label (e.g., "account_balance[0.0.5000]")
+	payload := (*webhookCalls)[0]
+
+	// Verify webhook receives the MetricID in the payload
+	if payload.MetricID != "account_balance[0.0.5000]" {
+		t.Errorf("Expected MetricID account_balance[0.0.5000], got %s", payload.MetricID)
+	}
+
+	// Clean up
+	err = <-errChan
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Unexpected error from Run(): %v", err)
+	}
 }
 
 // TestEndToEndMultipleWebhooks tests alert is sent to multiple webhook endpoints
 func TestEndToEndMultipleWebhooks(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create two separate httptest.Server endpoints
-	// 2. Create manager with both webhook URLs
-	// 3. Add alert rule
-	// 4. Send metric that triggers alert
-	// 5. Verify BOTH webhooks received the alert payload
-	// 6. Verify payloads are identical
-	t.Skip("Implement multiple webhooks test")
+	// Create two mock servers that capture webhook calls
+	server1, webhookCalls1 := captureWebhookCalls(t)
+	defer server1.Close()
+	server2, webhookCalls2 := captureWebhookCalls(t)
+	defer server2.Close()
+
+	// Create AlertManager with both webhook URLs
+	cfg := config.AlertingConfig{
+		Webhooks: []string{server1.URL, server2.URL},
+	}
+	manager := NewManager(cfg)
+	err := manager.AddRule(AlertRule{
+		ID:         "multi_webhook_rule",
+		Name:       "Multiple Webhooks Test",
+		MetricName: "test_metric",
+		Condition:  ">",
+		Threshold:  100,
+		Enabled:    true,
+		Severity:   "warning",
+	})
+	if err != nil {
+		t.Fatalf("Failed to add rule: %v", err)
+	}
+
+	// Start alert processor
+	_, cancel, errChan := startAlertProcessor(manager, 2*time.Second)
+	defer cancel()
+
+	// Send metric that triggers alert
+	sendMetricAndVerifyWebhooks(t, manager, 150.0, 100*time.Millisecond,
+		1, nil, webhookCalls1)
+	sendMetricAndVerifyWebhooks(t, manager, 150.0, 100*time.Millisecond,
+		1, nil, webhookCalls2)
+
+	// Verify BOTH webhookCalls1 and webhookCalls2 have the alert
+	payload1 := (*webhookCalls1)[0]
+	payload2 := (*webhookCalls2)[0]
+
+	// Verify payloads are identical (same RuleID, Value, Timestamp, etc.)
+	if payload1.RuleID != "multi_webhook_rule" || payload2.RuleID != "multi_webhook_rule" {
+		t.Errorf("Expected RuleID multi_webhook_rule, got %s and %s",
+			payload1.RuleID, payload2.RuleID)
+	}
+	if payload1.RuleName != "Multiple Webhooks Test" || payload2.RuleName != "Multiple Webhooks Test" {
+		t.Errorf("Expected RuleName Multiple Webhooks Test, got %s and %s",
+			payload1.RuleName, payload2.RuleName)
+	}
+	if payload1.Severity != "warning" || payload2.Severity != "warning" {
+		t.Errorf("Expected Severity warning, got %s and %s",
+			payload1.Severity, payload2.Severity)
+	}
+	if payload1.Value != 150.0 || payload2.Value != 150.0 {
+		t.Errorf("Expected Value 150.0, got %f and %f", payload1.Value, payload2.Value)
+	}
+	if payload1.Timestamp != payload2.Timestamp {
+		t.Errorf("Expected identical timestamps, got %d vs %d",
+			payload1.Timestamp, payload2.Timestamp)
+	}
+
+	// Clean up
+	err = <-errChan
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Unexpected error from Run(): %v", err)
+	}
 }
 
 // TestEndToEndAlertDisabledRuleNoWebhook tests disabled rules don't trigger webhooks
 func TestEndToEndAlertDisabledRuleNoWebhook(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create mock webhook server
-	// 2. Add alert rule but set Enabled: false
-	// 3. Send metric that would normally trigger the rule
-	// 4. Verify webhook was NOT called
-	t.Skip("Implement disabled rule webhook test")
+	// Create mock server that captures webhook calls
+	server, webhookCalls := captureWebhookCalls(t)
+	defer server.Close()
+
+	// Create AlertManager with mock webhook URL
+	cfg := config.AlertingConfig{
+		Webhooks: []string{server.URL},
+	}
+	manager := NewManager(cfg)
+	err := manager.AddRule(AlertRule{
+		ID:         "disabled_rule",
+		Name:       "Disabled Rule Test",
+		MetricName: "test_metric",
+		Condition:  ">",
+		Threshold:  100,
+		Enabled:    false, // KEY: Rule is disabled
+		Severity:   "warning",
+	})
+	if err != nil {
+		t.Fatalf("Failed to add rule: %v", err)
+	}
+
+	// Start alert processor
+	_, cancel, errChan := startAlertProcessor(manager, 2*time.Second)
+	defer cancel()
+
+	// Send metric that would normally trigger the rule (e.g., value > 100)
+	// Verify webhook was NOT called (webhookCalls should be empty)
+	sendMetricAndVerifyWebhooks(t, manager, 150.0, 100*time.Millisecond,
+		0, nil, webhookCalls)
+
+	// Clean up
+	err = <-errChan
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Unexpected error from Run(): %v", err)
+	}
 }
 
 // TestEndToEndContextCancellation tests graceful shutdown via context
 func TestEndToEndContextCancellation(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create manager with alert rule
-	// 2. Start manager.Run() with cancellable context
-	// 3. Send a few metrics
-	// 4. Cancel the context
-	// 5. Verify manager.Run() returns without panicking
-	// 6. Verify context.Cancelled error is returned
-	t.Skip("Implement context cancellation test")
+	// Create mock server that captures webhook calls
+	server, webhookCalls := captureWebhookCalls(t)
+	defer server.Close()
+
+	// Create AlertManager with mock webhook URL
+	cfg := config.AlertingConfig{
+		Webhooks: []string{server.URL},
+	}
+	manager := NewManager(cfg)
+	err := manager.AddRule(AlertRule{
+		ID:         "cancel_test_rule",
+		Name:       "Context Cancellation Test",
+		MetricName: "test_metric",
+		Condition:  ">",
+		Threshold:  100,
+		Enabled:    true,
+		Severity:   "info",
+	})
+	if err != nil {
+		t.Fatalf("Failed to add rule: %v", err)
+	}
+
+	// Start alert processor
+	_, cancel, errChan := startAlertProcessor(manager, 10*time.Second) // long timeout
+	_ = webhookCalls                                                   // silence unused warning if not used
+
+	// Send a metric
+	metric := types.Metric{
+		Name:  "test_metric",
+		Value: 150.0,
+	}
+	err = manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	// Wait briefly for alert processing to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Now cancel the context to trigger shutdown
+	cancel()
+
+	// Wait for Run() to return
+	err = <-errChan
+	// Verify error is context.Canceled
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Expected context.Canceled, got %v", err)
+	}
+
+	// Clean up
+	cancel()
+	err = <-errChan
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Expected context.Canceled, got %v", err)
+	}
 }
 
 // TestEndToEndWebhookFailureHandling tests webhook retry on server errors
 func TestEndToEndWebhookFailureHandling(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create server that fails first 2 requests, succeeds on 3rd
-	// 2. Add alert rule
-	// 3. Send metric that triggers alert
-	// 4. Verify webhook eventually succeeds (checks for retry logic)
-	// 5. Verify alert was logged/handled correctly
-	t.Skip("Implement webhook failure handling test")
+	// Create a server that fails first 2 requests, then succeeds
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount < 3 {
+			// First 2 attempts fail
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		// 3rd attempt succeeds
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// Capture webhook calls with the failing server
+	var mu sync.Mutex
+	var calls []WebhookPayload
+	failingServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var payload WebhookPayload
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		calls = append(calls, payload)
+		mu.Unlock()
+
+		// Simulate failures on first 2 attempts
+		if len(calls) < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer failingServer.Close()
+
+	// Create AlertManager with the failing webhook URL
+	cfg := config.AlertingConfig{
+		Webhooks: []string{failingServer.URL},
+	}
+	manager := NewManager(cfg)
+	err := manager.AddRule(AlertRule{
+		ID:         "retry_test_rule",
+		Name:       "Retry Test Rule",
+		MetricName: "test_metric",
+		Condition:  ">",
+		Threshold:  100,
+		Enabled:    true,
+		Severity:   "critical",
+	})
+	if err != nil {
+		t.Fatalf("Failed to add rule: %v", err)
+	}
+
+	// Start alert processor (need longer timeout for retries)
+	_, cancel, errChan := startAlertProcessor(manager, 5*time.Second)
+	defer cancel()
+
+	// Send metric that triggers alert
+	sendMetricAndVerifyWebhooks(t, manager, 150.0, 100*time.Millisecond,
+		1, nil, webhookCalls)
+
+	// 2. Wait for retries to happen and eventually succeed
+	// 3. Verify webhook was called (at least 1 successful call)
+	// 4. Verify the alert payload is correct despite retries
+
+	// Clean up
+	err = <-errChan
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Unexpected error from Run(): %v", err)
+	}
 }
 
 // TestEndToEndAlertQueueOverflow tests behavior when alert queue is full
 func TestEndToEndAlertQueueOverflow(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create manager with very small queue buffer (e.g., 1)
-	// 2. Add multiple alert rules
-	// 3. Send many metrics rapidly to overflow queue
-	// 4. Verify alert is dropped with log message
-	// 5. Verify no panic occurs
-	t.Skip("Implement alert queue overflow test")
+	// Create mock server that captures webhook calls
+	server, webhookCalls := captureWebhookCalls(t)
+	defer server.Close()
+
+	// Create AlertManager with very small queue buffer
+	cfg := config.AlertingConfig{
+		Webhooks:        []string{server.URL},
+		QueueBufferSize: 1, // Only room for 1 alert in queue
+	}
+	manager := NewManager(cfg)
+	err := manager.AddRule(AlertRule{
+		ID:         "overflow_rule",
+		Name:       "Overflow Test Rule",
+		MetricName: "test_metric",
+		Condition:  ">",
+		Threshold:  50,
+		Enabled:    true,
+	})
+	if err != nil {
+		t.Fatalf("Failed to add rule: %v", err)
+	}
+
+	// Start alert processor
+	_, cancel, errChan := startAlertProcessor(manager, 2*time.Second)
+	defer cancel()
+
+	// TODO: Implement the test-specific part
+	// 1. Send many metrics rapidly to trigger overflow
+	// 2. Some alerts will be dropped due to full queue
+	// 3. Verify that calls to CheckMetric() don't panic
+	// 4. Verify that some webhooks were called (but maybe not all)
+	// 5. Check logs for "Alert queue full" message if possible
+
+	// Clean up
+	err = <-errChan
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Unexpected error from Run(): %v", err)
+	}
 }
 
 // TestEndToEndStateTrackingWithWebhook tests state-tracking conditions (changed/increased/decreased)
 // work correctly and trigger webhooks appropriately
 func TestEndToEndStateTrackingWithWebhook(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create "changed" condition alert rule
-	// 2. Send first metric: 100 (initializes state)
-	// 3. Verify NO webhook called (first value, no previous to compare)
-	// 4. Send second metric: 150 (different from previous)
-	// 5. Verify webhook IS called
-	// 6. Send third metric: 150 (same as previous)
-	// 7. Verify webhook NOT called
-	t.Skip("Implement state tracking with webhook test")
+	// Create mock server that captures webhook calls
+	server, webhookCalls := captureWebhookCalls(t)
+	defer server.Close()
+
+	// Create AlertManager with mock webhook URL
+	cfg := config.AlertingConfig{
+		Webhooks: []string{server.URL},
+	}
+	manager := NewManager(cfg)
+	err := manager.AddRule(AlertRule{
+		ID:         "state_tracking_rule",
+		Name:       "State Tracking Test",
+		MetricName: "test_metric",
+		Condition:  "changed",
+		Enabled:    true,
+		Severity:   "info",
+	})
+	if err != nil {
+		t.Fatalf("Failed to add rule: %v", err)
+	}
+
+	// Start alert processor
+	_, cancel, errChan := startAlertProcessor(manager, 3*time.Second)
+	defer cancel()
+
+	// TODO: Implement the test-specific part
+	// 1. Send first metric: 100 (initializes state)
+	// 2. Wait briefly, verify webhook NOT called (first value has no previous to compare)
+	// 3. Send second metric: 150 (different from previous)
+	// 4. Wait, verify webhook IS called (1 total call)
+	// 5. Send third metric: 150 (same as previous)
+	// 6. Wait, verify webhook NOT called (still 1 total call)
+	// 7. Send fourth metric: 200 (different again)
+	// 8. Wait, verify webhook called again (2 total calls)
+
+	// Clean up
+	err = <-errChan
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Unexpected error from Run(): %v", err)
+	}
 }
 
 func defaultAlertManagerConfig(t *testing.T) config.AlertingConfig {
@@ -211,6 +686,32 @@ func defaultAlertManagerConfig(t *testing.T) config.AlertingConfig {
 		Webhooks:        []string{"https://example.com/webhook"},
 		QueueBufferSize: 100,
 		CooldownSeconds: 300,
+	}
+}
+
+// Helper: sendMetricAndVerifyWebhooks sends a metric and verifies webhook was called expected number of times
+// Reduces duplication when testing multiple metric scenarios
+// Example usage:
+//
+//	sendMetricAndVerifyWebhooks(t, manager, 150.0, 100*time.Millisecond, 1, webhookCalls)
+func sendMetricAndVerifyWebhooks(t *testing.T, manager *Manager, value float64, waitTime time.Duration,
+	expectedCalls int, labels map[string]string, webhookCalls *[]WebhookPayload) {
+	metric := types.Metric{
+		Name:   "test_metric",
+		Value:  value,
+		Labels: labels,
+	}
+	err := manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	if 0 < waitTime {
+		time.Sleep(waitTime)
+	}
+
+	if len(*webhookCalls) != expectedCalls {
+		t.Fatalf("Expected %d webhook calls, got %d", expectedCalls, len(*webhookCalls))
 	}
 }
 
@@ -228,14 +729,14 @@ func captureWebhookCalls(t *testing.T) (*httptest.Server, *[]WebhookPayload) {
 	var calls []WebhookPayload
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 1. Verify request method is POST
+		// Verify request method is POST
 		if r.Method != "POST" {
 			t.Errorf("Expected POST, got %s", r.Method)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		// 2. Verify Content-Type is application/json
+		// Verify Content-Type is application/json
 		contentTypeHeader := r.Header.Get("Content-Type")
 		if contentTypeHeader != "application/json" {
 			t.Errorf("Expected application/json, got %s", contentTypeHeader)
@@ -243,7 +744,7 @@ func captureWebhookCalls(t *testing.T) (*httptest.Server, *[]WebhookPayload) {
 			return
 		}
 
-		// 3. Decode request body into WebhookPayload
+		// Decode request body into WebhookPayload
 		var payload WebhookPayload
 		err := json.NewDecoder(r.Body).Decode(&payload)
 		if err != nil {
@@ -252,12 +753,12 @@ func captureWebhookCalls(t *testing.T) (*httptest.Server, *[]WebhookPayload) {
 			return
 		}
 
-		// 4. Lock mutex, append to calls slice, unlock
+		// ock mutex, append to calls slice, unlock
 		mu.Lock()
 		calls = append(calls, payload)
 		mu.Unlock()
 
-		// 5. Write 200 OK response
+		// Write 200 OK response
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -287,7 +788,29 @@ func waitForWebhookCall(callsPtr *[]WebhookPayload, expectedCount int, timeout t
 	return false
 }
 
-// contextWithTimeout creates a context with timeout for test cleanup
+// Helper: contextWithTimeout creates a context with timeout for test cleanup
 func contextWithTimeout(timeout time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), timeout)
+}
+
+// Helper: startAlertProcessor starts the alert manager's Run loop in a goroutine
+// Returns the context, cancel func, and error channel
+// Useful for managing processor lifecycle in tests
+// Example usage:
+//
+//	ctx, cancel, errChan := startAlertProcessor(manager, 2*time.Second)
+//	defer cancel()
+//	// ...send metrics...
+//	err := <-errChan  // waits for processor to stop
+func startAlertProcessor(manager *Manager, timeout time.Duration) (context.Context, context.CancelFunc, <-chan error) {
+	// manager.Run() runs in a loop and returns when context is done
+	// 1. Always provide a timeout context - Otherwise it runs forever
+	// 2. Expect it to return context.Cancelled or context.DeadlineExceeded - This is normal/expected
+	// 3. Don't treat it as a test failure - It's how you clean up the goroutine
+	ctx, cancel := contextWithTimeout(timeout)
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- manager.Run(ctx)
+	}()
+	return ctx, cancel, errChan
 }

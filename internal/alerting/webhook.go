@@ -19,6 +19,7 @@ type WebhookPayload struct {
 	Message   string  `json:"message"`
 	Value     float64 `json:"value"`
 	Timestamp int64   `json:"timestamp"`
+	MetricID  string  `json:"metric_id"`
 }
 
 // WebhookConfig holds configuration for webhook sending
