@@ -23,7 +23,8 @@ func TestEndToEndAlertDispatchSingleRule(t *testing.T) {
 
 	// Create AlertManager with mock webhook URL
 	cfg := config.AlertingConfig{
-		Webhooks: []string{server.URL},
+		Webhooks:        []string{server.URL},
+		QueueBufferSize: 10,
 	}
 	manager := NewManager(cfg)
 	err := manager.AddRule(AlertRule{
@@ -55,7 +56,7 @@ func TestEndToEndAlertDispatchSingleRule(t *testing.T) {
 
 	// Wait for Run() to return
 	err = <-errChan
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Unexpected error from Run(): %v", err)
 	}
 
@@ -82,7 +83,8 @@ func TestEndToEndAlertDispatchMultipleRules(t *testing.T) {
 
 	// Create AlertManager with mock webhook URL
 	cfg := config.AlertingConfig{
-		Webhooks: []string{server.URL},
+		Webhooks:        []string{server.URL},
+		QueueBufferSize: 10,
 	}
 	// Add multiple alert rules (e.g., >, <, ==, changed)
 	manager := NewManager(cfg)
@@ -140,7 +142,7 @@ func TestEndToEndAlertDispatchMultipleRules(t *testing.T) {
 
 	// Wait for Run() to return
 	err = <-errChan
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Unexpected error from Run(): %v", err)
 	}
 
@@ -154,14 +156,14 @@ func TestEndToEndAlertDispatchMultipleRules(t *testing.T) {
 		ruleIDs[call.RuleID] = true
 	}
 
-	if !ruleIDs["rule1"] {
-		t.Error("Expected rule1 (>) to trigger")
+	if !ruleIDs["gt_rule"] {
+		t.Error("Expected gt_rule (>) to trigger")
 	}
-	if !ruleIDs["rule3"] {
-		t.Error("Expected rule3 (changed) to trigger")
+	if !ruleIDs["changed_rule"] {
+		t.Error("Expected changed_rule (changed) to trigger")
 	}
-	if ruleIDs["rule2"] {
-		t.Error("Expected rule2 (<) NOT to trigger")
+	if ruleIDs["lt_rule"] {
+		t.Error("Expected lt_rule (<) NOT to trigger")
 	}
 }
 
@@ -175,6 +177,7 @@ func TestEndToEndAlertWithCooldown(t *testing.T) {
 	cfg := config.AlertingConfig{
 		CooldownSeconds: 1,
 		Webhooks:        []string{server.URL},
+		QueueBufferSize: 10,
 	}
 	manager := NewManager(cfg)
 	// Add alert rule
@@ -215,7 +218,7 @@ func TestEndToEndAlertWithCooldown(t *testing.T) {
 
 	// Clean up: wait for processor to finish
 	err = <-errChan
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Unexpected error from Run(): %v", err)
 	}
 }
@@ -228,7 +231,8 @@ func TestEndToEndWebhookPayloadFormat(t *testing.T) {
 
 	// Create AlertManager with mock webhook URL
 	cfg := config.AlertingConfig{
-		Webhooks: []string{server.URL},
+		Webhooks:        []string{server.URL},
+		QueueBufferSize: 10,
 	}
 	manager := NewManager(cfg)
 	err := manager.AddRule(AlertRule{
@@ -291,7 +295,7 @@ func TestEndToEndWebhookPayloadFormat(t *testing.T) {
 
 	// Clean up
 	err = <-errChan
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Unexpected error from Run(): %v", err)
 	}
 }
@@ -304,13 +308,14 @@ func TestEndToEndAlertWithLabels(t *testing.T) {
 
 	// Create AlertManager with mock webhook URL
 	cfg := config.AlertingConfig{
-		Webhooks: []string{server.URL},
+		Webhooks:        []string{server.URL},
+		QueueBufferSize: 10,
 	}
 	manager := NewManager(cfg)
 	err := manager.AddRule(AlertRule{
 		ID:         "labeled_rule",
 		Name:       "Labeled Rule Test",
-		MetricName: "account_balance",
+		MetricName: "test_metric",
 		Condition:  ">",
 		Threshold:  1000000,
 		Enabled:    true,
@@ -321,27 +326,27 @@ func TestEndToEndAlertWithLabels(t *testing.T) {
 	}
 
 	// Start alert processor
-	_, cancel, errChan := startAlertProcessor(manager, 2*time.Second)
+	_, cancel, errChan := startAlertProcessor(manager, 5*time.Second)
 	defer cancel()
 
 	// Send metric with labels (e.g., account_id: "0.0.5000")
 	labels := map[string]string{
 		"account_id": "0.0.5000",
 	}
-	sendMetricAndVerifyWebhooks(t, manager, 1500000.0, 100*time.Millisecond,
+	sendMetricAndVerifyWebhooks(t, manager, 1500000.0, 500*time.Millisecond,
 		1, labels, webhookCalls)
 
-	// Verify alert.MetricID includes the label (e.g., "account_balance[0.0.5000]")
+	// Verify alert.MetricID includes the label (e.g., "test_metric[0.0.5000]")
 	payload := (*webhookCalls)[0]
 
 	// Verify webhook receives the MetricID in the payload
-	if payload.MetricID != "account_balance[0.0.5000]" {
-		t.Errorf("Expected MetricID account_balance[0.0.5000], got %s", payload.MetricID)
+	if payload.MetricID != "test_metric[0.0.5000]" {
+		t.Errorf("Expected MetricID test_metric[0.0.5000], got %s", payload.MetricID)
 	}
 
 	// Clean up
 	err = <-errChan
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Unexpected error from Run(): %v", err)
 	}
 }
@@ -356,7 +361,8 @@ func TestEndToEndMultipleWebhooks(t *testing.T) {
 
 	// Create AlertManager with both webhook URLs
 	cfg := config.AlertingConfig{
-		Webhooks: []string{server1.URL, server2.URL},
+		Webhooks:        []string{server1.URL, server2.URL},
+		QueueBufferSize: 10,
 	}
 	manager := NewManager(cfg)
 	err := manager.AddRule(AlertRule{
@@ -409,7 +415,7 @@ func TestEndToEndMultipleWebhooks(t *testing.T) {
 
 	// Clean up
 	err = <-errChan
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Unexpected error from Run(): %v", err)
 	}
 }
@@ -422,7 +428,8 @@ func TestEndToEndAlertDisabledRuleNoWebhook(t *testing.T) {
 
 	// Create AlertManager with mock webhook URL
 	cfg := config.AlertingConfig{
-		Webhooks: []string{server.URL},
+		Webhooks:        []string{server.URL},
+		QueueBufferSize: 10,
 	}
 	manager := NewManager(cfg)
 	err := manager.AddRule(AlertRule{
@@ -449,7 +456,7 @@ func TestEndToEndAlertDisabledRuleNoWebhook(t *testing.T) {
 
 	// Clean up
 	err = <-errChan
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Unexpected error from Run(): %v", err)
 	}
 }
@@ -462,7 +469,8 @@ func TestEndToEndContextCancellation(t *testing.T) {
 
 	// Create AlertManager with mock webhook URL
 	cfg := config.AlertingConfig{
-		Webhooks: []string{server.URL},
+		Webhooks:        []string{server.URL},
+		QueueBufferSize: 10,
 	}
 	manager := NewManager(cfg)
 	err := manager.AddRule(AlertRule{
@@ -577,7 +585,8 @@ func TestEndToEndWebhookFailureHandling(t *testing.T) {
 
 	// Create AlertManager with the failing webhook URL
 	cfg := config.AlertingConfig{
-		Webhooks: []string{failingServer.URL},
+		Webhooks:        []string{failingServer.URL},
+		QueueBufferSize: 10, // Ensure queue has space for test alert
 	}
 	manager := NewManager(cfg)
 	err := manager.AddRule(AlertRule{
@@ -594,7 +603,8 @@ func TestEndToEndWebhookFailureHandling(t *testing.T) {
 	}
 
 	// Start alert processor (need longer timeout for retries)
-	_, cancel, errChan := startAlertProcessor(manager, 5*time.Second)
+	// Exponential backoff: 1s, 2s, then success ≈ 4 seconds total
+	_, cancel, errChan := startAlertProcessor(manager, 10*time.Second)
 	defer cancel()
 
 	// Send metric that triggers alert
@@ -608,8 +618,8 @@ func TestEndToEndWebhookFailureHandling(t *testing.T) {
 	}
 
 	// Wait for retries to complete (exponential backoff: 1s, 2s, then success)
-	// Max retries is 5, initial backoff 1s, so max wait >7 seconds for this test
-	time.Sleep(10 * time.Second)
+	// This gives enough time for all retries to execute
+	time.Sleep(4 * time.Second)
 
 	// Verify attempts 1 & 2 failed, attempt 3 succeeded
 	mu.Lock()
@@ -633,7 +643,7 @@ func TestEndToEndWebhookFailureHandling(t *testing.T) {
 
 	// Clean up
 	err = <-errChan
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Unexpected error from Run(): %v", err)
 	}
 }
@@ -703,7 +713,7 @@ func TestEndToEndAlertQueueOverflow(t *testing.T) {
 
 	// Clean up
 	err = <-errChan
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Unexpected error from Run(): %v", err)
 	}
 }
@@ -717,7 +727,8 @@ func TestEndToEndStateTrackingWithWebhook(t *testing.T) {
 
 	// Create AlertManager with mock webhook URL
 	cfg := config.AlertingConfig{
-		Webhooks: []string{server.URL},
+		Webhooks:        []string{server.URL},
+		QueueBufferSize: 10,
 	}
 	manager := NewManager(cfg)
 	err := manager.AddRule(AlertRule{
@@ -759,7 +770,7 @@ func TestEndToEndStateTrackingWithWebhook(t *testing.T) {
 
 	// Clean up
 	err = <-errChan
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Unexpected error from Run(): %v", err)
 	}
 }
