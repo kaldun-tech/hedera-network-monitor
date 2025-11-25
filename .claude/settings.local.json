@@ -22,7 +22,8 @@
       "Bash(./scripts/check-offline.sh:*)",
       "Bash(make lint:*)",
       "Bash(timeout 30 go test:*)",
-      "Bash(timeout 20 go test:*)"
+      "Bash(timeout 20 go test:*)",
+      "Bash(timeout 60 go test:*)"
     ],
     "deny": [],
     "ask": []
