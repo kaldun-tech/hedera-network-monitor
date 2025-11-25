@@ -38,8 +38,18 @@ jobs:
           exit 1
         fi
 
-    - name: Run tests with race detection
+    - name: Run unit tests with race detection
+      # Unit tests: fast (~4s), run by default
+      # Excludes integration tests with //go:build integration tag
       run: go test -v -race ./...
 
-    - name: Test coverage
+    - name: Run integration tests
+      # Integration tests: slow (~30-60s), require -tags integration
+      # Tests end-to-end async workflows (webhook retries, state tracking, etc)
+      run: go test -v -race -tags integration ./...
+
+    - name: Test coverage (unit tests)
       run: go test -cover ./...
+
+    - name: Test coverage (integration tests)
+      run: go test -cover -tags integration ./...

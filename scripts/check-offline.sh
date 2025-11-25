@@ -37,9 +37,10 @@ fi
 pass "Linter checks"
 echo ""
 
-# Check 3: Run unit tests
+# Check 3: Run unit tests (fast, ~4s)
+# Note: Integration tests are run separately - see check-integration.sh
 echo "3. Running unit tests..."
-if ! make test > /dev/null 2>&1; then
+if ! make test-unit > /dev/null 2>&1; then
     fail "Unit tests"
 fi
 pass "Unit tests"

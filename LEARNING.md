@@ -638,6 +638,108 @@ Use the verbose version when cleanup can fail.
 
 ---
 
+## Testing Patterns for Async Code
+
+### The Integration vs Unit Test Challenge
+
+When testing asynchronous code (goroutines, channels, async processing), you'll encounter a fundamental challenge:
+
+**Unit tests need to be fast (~< 100ms), but async code requires waiting to verify behavior.**
+
+Example from this project - testing webhook retry logic:
+```go
+// We need to:
+// 1. Send a metric
+// 2. Wait for alert manager to process it
+// 3. Wait for webhook retry logic (1s, 2s, 4s backoff)
+// 4. Verify the webhook succeeded
+// Total time: ~5 seconds per test
+```
+
+If you have 10 such tests, you'd be waiting 50 seconds on every commit, which breaks the fast feedback loop developers expect.
+
+### The Solution: Separate Test Tags
+
+Use Go's build tags to split fast and slow tests:
+
+**In integration_test.go (slow tests):**
+```go
+//go:build integration
+// +build integration
+
+package alerting
+
+func TestEndToEndWebhookRetry(t *testing.T) {
+    // Takes ~5 seconds
+    // Tests async webhook retry logic
+}
+```
+
+**In manager_test.go (fast tests):**
+```go
+// No build tag - runs by default
+// Tests synchronous condition evaluation
+
+func TestAlertCondition_GreaterThan(t *testing.T) {
+    // Takes < 1ms
+    // Tests pure function logic
+}
+```
+
+**In Makefile:**
+```makefile
+test-unit:
+    go test ./...                    # Excludes integration tag (~4s)
+
+test-integration:
+    go test -tags integration ./...  # Includes integration tag (~30-60s)
+
+test: test-unit test-integration    # Run both
+```
+
+### When to Use Each
+
+| Category | Purpose | Speed | When to Run |
+|----------|---------|-------|------------|
+| **Unit Tests** | Test pure logic, mocked dependencies | ~1-4 seconds | Every commit (pre-commit hook) |
+| **Integration Tests** | Test end-to-end async workflows | ~30-60 seconds | Before pushing, in CI/CD |
+
+### Key Insights
+
+1. **Don't fight async waits** - You can't make async tests truly fast
+2. **Mock or tag, don't hack timeouts** - Never use random sleeps to "fix" flakiness
+3. **Fast feedback loop is critical** - Developers need < 5 seconds per commit
+4. **Async tests require integration** - They're not "unit" tests by definition
+5. **CI can afford to wait** - 60 seconds in CI is acceptable if local is fast
+
+### Example Pattern Used
+
+```go
+// Mock webhook server - captures all HTTP calls
+server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    mu.Lock()
+    calls = append(calls, parsePayload(r))
+    mu.Unlock()
+    w.WriteHeader(http.StatusOK)
+}))
+
+// Run async processor with timeout
+_, cancel, errChan := startAlertProcessor(manager, 2*time.Second)
+defer cancel()
+
+// Send metric and wait for processing
+metric := types.Metric{Name: "test", Value: 150.0}
+manager.CheckMetric(metric)
+time.Sleep(200 * time.Millisecond)  // Wait for async processing
+
+// Verify webhook was called
+if len(calls) != 1 {
+    t.Fatal("Expected webhook call")
+}
+```
+
+---
+
 ## Key Takeaways
 
 1. **Goroutines are cheap** - Spawn thousands if needed
@@ -662,5 +764,7 @@ Use the verbose version when cleanup can fail.
 
 ---
 
-**Last Updated:** November 19, 2025
-**Session:** Concurrency patterns and SDK discovery
+**Last Updated:** November 25, 2025
+**Sessions:**
+- November 19: Concurrency patterns and SDK discovery
+- November 25: Integration testing patterns for async code

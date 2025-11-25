@@ -9,7 +9,8 @@ Run this **before committing** to validate code quality and functionality withou
 ### Checks performed:
 - Code formatting (`make fmt`)
 - Linter validation (`make lint`)
-- Unit tests (`make test`)
+- Unit tests only (`make test-unit`) - Fast, ~4 seconds
+  - Excludes slow integration tests (run via CI or `make test-integration`)
 - Build all binaries (`make build`)
 - Dependency management (`go mod tidy`)
 
@@ -97,18 +98,38 @@ Note: This requires the monitor service to be running
 Ready to push!
 ```
 
+## Test Suite Organization
+
+**Unit Tests** (Fast, ~4 seconds):
+- Run on every commit via `check-offline.sh`
+- Test pure logic with mocked dependencies
+- Excludes long-running async tests via `//go:build integration` tag
+- Run with: `make test-unit`
+
+**Integration Tests** (Slow, ~30-60 seconds):
+- Test end-to-end async workflows (webhook retries, state tracking, etc.)
+- Run before pushing with: `make test-integration`
+- Always run in CI/CD pipeline
+- Require explicit `-tags integration` flag
+
 ## Typical workflow
 
-1. **Before committing:**
+1. **Before committing (fast feedback):**
    ```bash
-   ./scripts/check-offline.sh
+   ./scripts/check-offline.sh    # Runs unit tests only (~15 seconds)
    git add .
    git commit -m "Your message"
    ```
 
-2. **Before pushing:**
+2. **Before pushing (comprehensive testing):**
    ```bash
-   # Terminal 1: Start the monitor
+   # Option A: Run integration tests locally (takes ~30-60s)
+   make test-integration
+
+   # Option B: Let CI run them (recommended)
+   # Just push, CI pipeline tests everything automatically
+
+   # Terminal 1 (optional): Start the monitor for online checks
    ./monitor --config config/config.yaml
 
    # Terminal 2: Run online checks
@@ -117,6 +138,12 @@ Ready to push!
    # If all checks pass:
    git push
    ```
+
+3. **In CI/CD (automatic):**
+   - Runs all checks on PRs
+   - Step 1: Unit tests (fast feedback)
+   - Step 2: Integration tests (comprehensive validation)
+   - Both must pass before merge
 
 ## Customization
 

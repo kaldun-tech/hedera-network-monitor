@@ -42,11 +42,22 @@
   - `defaultAlertManagerConfig()`, `waitForWebhookCall()` in alerting
   - 6 test helpers in CLI tests (awaiting implementation)
 
-### 5. Test Execution Status
+### 5. Test Execution & CI Status
 - ✓ All 9 integration tests individually passing
 - ✓ Linter: `✓ Linting complete` (zero warnings)
 - ✓ Build: All packages compile successfully
-- **Note:** Full suite takes ~2 minutes due to intentional waits for retry logic and timeouts
+- ✓ **Unit tests only:** ~4 seconds (pre-commit feedback)
+- ✓ **Integration tests:** ~30-60 seconds (CI pipeline)
+- ✓ **CI Pipeline Updated:**
+  - Step 1: Unit tests (fast feedback for PRs)
+  - Step 2: Integration tests (comprehensive end-to-end)
+  - Step 3: Coverage reports for both
+  - Both must pass before merge
+
+### 6. Build Tag Separation
+- `//go:build integration` added to `internal/alerting/integration_test.go`
+- Excludes slow tests from `make test-unit` and per-commit checks
+- Requires `-tags integration` flag to run (used in CI and `make test-integration`)
 
 ---
 

@@ -444,12 +444,33 @@ make fmt
 # Run linter
 make lint
 
-# Run tests
+# Run unit tests (fast, ~4s - run before committing)
+make test-unit
+
+# Run integration tests (slow, ~30-60s - run before pushing)
+make test-integration
+
+# Run all tests (unit + integration)
 make test
 
-# Run tests with coverage
+# Run tests with coverage report
 make test-coverage
 ```
+
+### Test Organization
+
+The test suite is split into two categories:
+
+- **Unit Tests:** Fast, ~4 seconds. Run on every commit. Excludes long-running async tests.
+  ```bash
+  make test-unit
+  ./scripts/check-offline.sh  # Also runs unit tests
+  ```
+
+- **Integration Tests:** Slow, ~30-60 seconds. Test end-to-end workflows with async operations.
+  ```bash
+  make test-integration
+  ```
 
 ### Development Workflow
 
@@ -458,18 +479,24 @@ make test-coverage
    git checkout -b feature/your-feature
    ```
 
-2. **Make changes and test:**
+2. **Make changes and test (fast path):**
    ```bash
-   make test
+   make test-unit        # Quick feedback
    make lint
+   ./scripts/check-offline.sh  # Full pre-commit checks
    ```
 
-3. **Build and verify:**
+3. **Before pushing, run full tests:**
+   ```bash
+   make test             # Runs both unit + integration
+   ```
+
+4. **Build and verify:**
    ```bash
    make build
    ```
 
-4. **Commit and push:**
+5. **Commit and push:**
    ```bash
    git commit -am "Add your feature description"
    git push origin feature/your-feature

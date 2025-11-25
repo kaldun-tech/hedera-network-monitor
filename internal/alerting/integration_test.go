@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package alerting
 
 import (
@@ -39,7 +42,7 @@ func TestEndToEndAlertDispatchSingleRule(t *testing.T) {
 	}
 
 	// Start alert processor
-	_, _, errChan := startAlertProcessor(manager, 2*time.Second)
+	_, _, errChan := startAlertProcessor(manager, 1*time.Second)
 
 	// Send metric via CheckMetric() that triggers the rule alert
 	metric := types.Metric{
@@ -125,7 +128,7 @@ func TestEndToEndAlertDispatchMultipleRules(t *testing.T) {
 	}
 
 	// Start alert processor
-	_, _, errChan := startAlertProcessor(manager, 2*time.Second)
+	_, _, errChan := startAlertProcessor(manager, 1*time.Second)
 
 	// Send metric values that trigger only greater than > and changed rules
 	metric := types.Metric{
@@ -193,7 +196,7 @@ func TestEndToEndAlertWithCooldown(t *testing.T) {
 	}
 
 	// Start alert processor
-	_, cancel, errChan := startAlertProcessor(manager, 5*time.Second)
+	_, cancel, errChan := startAlertProcessor(manager, 3*time.Second)
 	defer cancel()
 
 	// Send first metric that triggers alert
@@ -202,8 +205,8 @@ func TestEndToEndAlertWithCooldown(t *testing.T) {
 	// Send second metric within cooldown period (no additional alert)
 	sendMetricAndVerifyWebhooks(t, manager, 200.0, 0, 1, nil, webhookCalls)
 
-	// Wait for cooldown to expire (1.1 seconds to be safe)
-	time.Sleep(1100 * time.Millisecond)
+	// Wait for cooldown to expire
+	time.Sleep(1200 * time.Millisecond)
 
 	// Send third metric after cooldown expires (triggers alert again)
 	sendMetricAndVerifyWebhooks(t, manager, 250.0, 100*time.Millisecond, 2, nil, webhookCalls)
@@ -326,14 +329,14 @@ func TestEndToEndAlertWithLabels(t *testing.T) {
 	}
 
 	// Start alert processor
-	_, cancel, errChan := startAlertProcessor(manager, 5*time.Second)
+	_, cancel, errChan := startAlertProcessor(manager, 2*time.Second)
 	defer cancel()
 
 	// Send metric with labels (e.g., account_id: "0.0.5000")
 	labels := map[string]string{
 		"account_id": "0.0.5000",
 	}
-	sendMetricAndVerifyWebhooks(t, manager, 1500000.0, 500*time.Millisecond,
+	sendMetricAndVerifyWebhooks(t, manager, 1500000.0, 200*time.Millisecond,
 		1, labels, webhookCalls)
 
 	// Verify alert.MetricID includes the label (e.g., "test_metric[0.0.5000]")
@@ -487,8 +490,8 @@ func TestEndToEndContextCancellation(t *testing.T) {
 	}
 
 	// Start alert processor
-	_, cancel, errChan := startAlertProcessor(manager, 10*time.Second) // long timeout
-	_ = webhookCalls                                                   // silence unused warning if not used
+	_, cancel, errChan := startAlertProcessor(manager, 1*time.Second)
+	_ = webhookCalls // silence unused warning if not used
 
 	// Send a metric
 	metric := types.Metric{
@@ -602,9 +605,8 @@ func TestEndToEndWebhookFailureHandling(t *testing.T) {
 		t.Fatalf("Failed to add rule: %v", err)
 	}
 
-	// Start alert processor (need longer timeout for retries)
-	// Exponential backoff: 1s, 2s, then success ≈ 4 seconds total
-	_, cancel, errChan := startAlertProcessor(manager, 10*time.Second)
+	// Start alert processor
+	_, cancel, errChan := startAlertProcessor(manager, 6*time.Second)
 	defer cancel()
 
 	// Send metric that triggers alert
@@ -617,9 +619,8 @@ func TestEndToEndWebhookFailureHandling(t *testing.T) {
 		t.Fatalf("CheckMetric failed: %v", err)
 	}
 
-	// Wait for retries to complete (exponential backoff: 1s, 2s, then success)
-	// This gives enough time for all retries to execute
-	time.Sleep(4 * time.Second)
+	// Wait for retries to complete
+	time.Sleep(3500 * time.Millisecond)
 
 	// Verify attempts 1 & 2 failed, attempt 3 succeeded
 	mu.Lock()
@@ -673,7 +674,7 @@ func TestEndToEndAlertQueueOverflow(t *testing.T) {
 	}
 
 	// Start alert processor
-	_, cancel, errChan := startAlertProcessor(manager, 5*time.Second)
+	_, cancel, errChan := startAlertProcessor(manager, 2*time.Second)
 	defer cancel()
 
 	// Send many metrics rapidly to trigger overflow
@@ -744,7 +745,7 @@ func TestEndToEndStateTrackingWithWebhook(t *testing.T) {
 	}
 
 	// Start alert processor
-	_, cancel, errChan := startAlertProcessor(manager, 3*time.Second)
+	_, cancel, errChan := startAlertProcessor(manager, 1*time.Second)
 	defer cancel()
 
 	// Send first metric: 100 (initializes state)

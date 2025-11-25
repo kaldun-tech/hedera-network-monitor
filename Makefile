@@ -1,4 +1,4 @@
-.PHONY: help build build-monitor build-cli test test-coverage lint fmt clean run run-monitor run-cli
+.PHONY: help build build-monitor build-cli test test-unit test-integration test-coverage lint fmt clean run run-monitor run-cli
 
 # Variables
 GO := go
@@ -27,7 +27,9 @@ help:
 	@echo "Development targets:"
 	@echo "  make fmt                - Format code with gofmt"
 	@echo "  make lint               - Run linter (requires golangci-lint)"
-	@echo "  make test               - Run tests"
+	@echo "  make test               - Run all tests (unit + integration)"
+	@echo "  make test-unit          - Run unit tests only (fast, ~4s)"
+	@echo "  make test-integration   - Run integration tests only (slow, ~30s)"
 	@echo "  make test-coverage      - Run tests with coverage report"
 	@echo "  make clean              - Remove build artifacts"
 	@echo ""
@@ -63,10 +65,18 @@ lint:
 	$(GOLINT) run ./...
 	@echo "✓ Linting complete"
 
-test:
-	@echo "Running tests..."
+test-unit:
+	@echo "Running unit tests (excluding integration tests)..."
 	$(GOTEST) -v -race ./...
-	@echo "✓ Tests complete"
+	@echo "✓ Unit tests complete"
+
+test-integration:
+	@echo "Running integration tests (slow, may take 30+ seconds)..."
+	$(GOTEST) -v -race -tags integration ./...
+	@echo "✓ Integration tests complete"
+
+test: test-unit test-integration
+	@echo "✓ All tests complete"
 
 test-coverage:
 	@echo "Running tests with coverage..."
@@ -110,15 +120,15 @@ setup-dev:
 	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	@echo "✓ Development environment ready"
 
-# Verify all checks
-verify: fmt lint test
+# Verify all checks (fast unit tests only)
+verify: fmt lint test-unit
 	@echo "✓ All checks passed"
 
-# Quick build and test
-quick: build test
+# Quick build and test (fast unit tests only)
+quick: build test-unit
 	@echo "✓ Quick check complete"
 
-# CI/CD target - strict checks
+# CI/CD target - strict checks (includes integration tests)
 ci: deps-download fmt lint test-coverage build
 	@echo "✓ CI checks complete"
 
