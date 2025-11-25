@@ -1,18 +1,10 @@
 package main
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
-
-	"github.com/kaldun-tech/hedera-network-monitor/internal/alerting"
-	"github.com/kaldun-tech/hedera-network-monitor/pkg/config"
-	"github.com/spf13/cobra"
 )
 
 // ============================================================================
@@ -281,11 +273,14 @@ func TestAccountTransactionsCommand_InvalidAccount(t *testing.T) {
 
 // createMockAPIServer creates an httptest.Server for testing CLI commands
 // Example usage:
-//   server := createMockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
-//       // Handle requests
-//   })
-//   defer server.Close()
-//   apiURL = server.URL
+//
+//	server := createMockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+//	    // Handle requests
+//	})
+//	defer server.Close()
+//	apiURL = server.URL
+//
+//nolint:unused
 func createMockAPIServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	// TODO: Implement helper
 	// 1. Create and return httptest.NewServer(handler)
@@ -294,10 +289,14 @@ func createMockAPIServer(t *testing.T, handler http.HandlerFunc) *httptest.Serve
 
 // captureCommandOutput captures stdout from running a cobra command
 // Example usage:
-//   output := captureCommandOutput(t, func() error {
-//       return rootCmd.Execute()
-//   })
+//
+//	output := captureCommandOutput(t, func() error {
+//	    return rootCmd.Execute()
+//	})
+//
 // Learning: Redirect os.Stdout during command execution
+//
+//nolint:unused
 func captureCommandOutput(t *testing.T, cmdFunc func() error) string {
 	// TODO: Implement helper
 	// 1. Save original os.Stdout
@@ -313,13 +312,18 @@ func captureCommandOutput(t *testing.T, cmdFunc func() error) string {
 
 // setGlobalFlags sets CLI global flags for testing
 // Example usage:
-//   setGlobalFlags("http://localhost:8080", "info")
+//
+//	setGlobalFlags("http://localhost:8080", "info")
+//
+//nolint:unused
 func setGlobalFlags(apiURLValue string, loglevelValue string) {
 	apiURL = apiURLValue
 	loglevel = loglevelValue
 }
 
 // createValidRuleJSON creates a valid alert rule JSON for testing
+//
+//nolint:unused
 func createValidRuleJSON() string {
 	return `{
 		"name": "Test Rule",
@@ -331,11 +335,15 @@ func createValidRuleJSON() string {
 }
 
 // createInvalidRuleJSON creates invalid alert rule JSON for testing
+//
+//nolint:unused
 func createInvalidRuleJSON() string {
 	return `{not valid json}`
 }
 
 // waitForServer waits for a server to be ready
+//
+//nolint:unused
 func waitForServer(t *testing.T, url string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {

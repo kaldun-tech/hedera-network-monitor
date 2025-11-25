@@ -19,7 +19,8 @@
       "Bash(go tool cover:*)",
       "Bash(cat:*)",
       "Bash(./hmon account balance:*)",
-      "Bash(./scripts/check-offline.sh:*)"
+      "Bash(./scripts/check-offline.sh:*)",
+      "Bash(make lint:*)"
     ],
     "deny": [],
     "ask": []

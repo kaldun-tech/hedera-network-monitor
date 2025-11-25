@@ -529,30 +529,49 @@ func TestEndToEndWebhookFailureHandling(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Capture webhook calls with the failing server
+	// Capture webhook calls with the failing server. Track each attempt
+	var requestAttempts []struct {
+		AttemptNumber int
+		StatusCode    int
+		Timestamp     time.Time
+	}
 	var mu sync.Mutex
 	var calls []WebhookPayload
+
 	failingServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
 		var payload WebhookPayload
 		err := json.NewDecoder(r.Body).Decode(&payload)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+
 		mu.Lock()
 		calls = append(calls, payload)
+		attemptNum := len(calls) // Track which attempt this is
 		mu.Unlock()
 
-		// Simulate failures on first 2 attempts
-		if len(calls) < 3 {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			return
+		// Record this attempt
+		mu.Lock()
+		var statusCode int
+		if attemptNum < 3 {
+			statusCode = http.StatusServiceUnavailable // Fail first 2
+		} else {
+			statusCode = http.StatusOK // Succeed on 3rd
 		}
-		w.WriteHeader(http.StatusOK)
+
+		requestAttempts = append(requestAttempts, struct {
+			AttemptNumber int
+			StatusCode    int
+			Timestamp     time.Time
+		}{
+			AttemptNumber: attemptNum,
+			StatusCode:    statusCode,
+			Timestamp:     time.Now(),
+		})
+		mu.Unlock()
+
+		w.WriteHeader(statusCode)
 	}))
 	defer failingServer.Close()
 
@@ -579,12 +598,38 @@ func TestEndToEndWebhookFailureHandling(t *testing.T) {
 	defer cancel()
 
 	// Send metric that triggers alert
-	sendMetricAndVerifyWebhooks(t, manager, 150.0, 100*time.Millisecond,
-		1, nil, webhookCalls)
+	metric := types.Metric{
+		Name:  "test_metric",
+		Value: 150.0,
+	}
+	err = manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
 
-	// 2. Wait for retries to happen and eventually succeed
-	// 3. Verify webhook was called (at least 1 successful call)
-	// 4. Verify the alert payload is correct despite retries
+	// Wait for retries to complete (exponential backoff: 1s, 2s, then success)
+	// Max retries is 5, initial backoff 1s, so max wait >7 seconds for this test
+	time.Sleep(10 * time.Second)
+
+	// Verify attempts 1 & 2 failed, attempt 3 succeeded
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(requestAttempts) < 3 {
+		t.Fatalf("Expected at least 3 attempts, got %d", len(requestAttempts))
+	}
+
+	// Check first two attempts failed
+	if requestAttempts[0].StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("Attempt 1: expected %d, got %d", http.StatusServiceUnavailable, requestAttempts[0].StatusCode)
+	}
+	if requestAttempts[1].StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("Attempt 2: expected %d, got %d", http.StatusServiceUnavailable, requestAttempts[1].StatusCode)
+	}
+	// Check third attempt succeeded
+	if requestAttempts[2].StatusCode != http.StatusOK {
+		t.Errorf("Attempt 3: expected %d, got %d", http.StatusOK, requestAttempts[2].StatusCode)
+	}
 
 	// Clean up
 	err = <-errChan
@@ -618,15 +663,43 @@ func TestEndToEndAlertQueueOverflow(t *testing.T) {
 	}
 
 	// Start alert processor
-	_, cancel, errChan := startAlertProcessor(manager, 2*time.Second)
+	_, cancel, errChan := startAlertProcessor(manager, 5*time.Second)
 	defer cancel()
 
-	// TODO: Implement the test-specific part
-	// 1. Send many metrics rapidly to trigger overflow
-	// 2. Some alerts will be dropped due to full queue
-	// 3. Verify that calls to CheckMetric() don't panic
-	// 4. Verify that some webhooks were called (but maybe not all)
-	// 5. Check logs for "Alert queue full" message if possible
+	// Send many metrics rapidly to trigger overflow
+	// With QueueBufferSize=1, only 1 alert can be queued at a time
+	// Additional alerts will be dropped
+	for i := 0; i < 10; i++ {
+		metric := types.Metric{
+			Name:  "test_metric",
+			Value: float64(60 + i), // All > 50 threshold, triggers rule
+		}
+		err := manager.CheckMetric(metric)
+		if err != nil {
+			t.Fatalf("CheckMetric panicked or failed: %v", err)
+		}
+	}
+
+	// Wait for webhook calls to be processed
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify that some webhooks were called (but not all 10, due to queue overflow)
+	// We expect at least 1 and at most a few (not 10)
+	callCount := len(*webhookCalls)
+	if callCount == 0 {
+		t.Errorf("Expected at least 1 webhook call, got %d", callCount)
+	}
+	if callCount >= 10 {
+		t.Errorf("Expected some alerts to be dropped due to overflow, but all 10 were processed")
+	}
+
+	// Verify webhook payload is correct (for the ones that did get through)
+	if callCount > 0 {
+		firstCall := (*webhookCalls)[0]
+		if firstCall.RuleID != "overflow_rule" {
+			t.Errorf("Expected rule_id overflow_rule, got %s", firstCall.RuleID)
+		}
+	}
 
 	// Clean up
 	err = <-errChan
@@ -663,15 +736,26 @@ func TestEndToEndStateTrackingWithWebhook(t *testing.T) {
 	_, cancel, errChan := startAlertProcessor(manager, 3*time.Second)
 	defer cancel()
 
-	// TODO: Implement the test-specific part
-	// 1. Send first metric: 100 (initializes state)
-	// 2. Wait briefly, verify webhook NOT called (first value has no previous to compare)
-	// 3. Send second metric: 150 (different from previous)
-	// 4. Wait, verify webhook IS called (1 total call)
-	// 5. Send third metric: 150 (same as previous)
-	// 6. Wait, verify webhook NOT called (still 1 total call)
-	// 7. Send fourth metric: 200 (different again)
-	// 8. Wait, verify webhook called again (2 total calls)
+	// Send first metric: 100 (initializes state)
+	// Wait briefly, verify webhook NOT called (first value has no previous to compare)
+	waitTime := 50 * time.Millisecond
+	sendMetricAndVerifyWebhooks(t, manager, 100.0, waitTime,
+		0, nil, webhookCalls)
+
+	// Send second metric: 150 (different from previous)
+	// Wait, verify webhook IS called (1 total call)
+	sendMetricAndVerifyWebhooks(t, manager, 150.0, waitTime,
+		1, nil, webhookCalls)
+
+	// Send third metric: 150 (same as previous)
+	// Wait, verify webhook NOT called (still 1 total call)
+	sendMetricAndVerifyWebhooks(t, manager, 150.0, waitTime,
+		1, nil, webhookCalls)
+
+	// Send fourth metric: 200 (different again)
+	// Wait, verify webhook called again (2 total calls)
+	sendMetricAndVerifyWebhooks(t, manager, 200.0, waitTime,
+		2, nil, webhookCalls)
 
 	// Clean up
 	err = <-errChan
@@ -680,6 +764,7 @@ func TestEndToEndStateTrackingWithWebhook(t *testing.T) {
 	}
 }
 
+//nolint:unused
 func defaultAlertManagerConfig(t *testing.T) config.AlertingConfig {
 	return config.AlertingConfig{
 		Enabled:         true,
@@ -772,19 +857,24 @@ func captureWebhookCalls(t *testing.T) (*httptest.Server, *[]WebhookPayload) {
 //	if !waitForWebhookCall(webhookCalls, 1, 2*time.Second) {
 //	    t.Fatal("Expected 1 webhook call within 2 seconds")
 //	}
+//
+//nolint:unused
 func waitForWebhookCall(callsPtr *[]WebhookPayload, expectedCount int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		// TODO: Implement wait logic
-		// 1. Lock mutex
-		// 2. Check if len(calls) >= expectedCount
-		// 3. Unlock mutex
-		// 4. Return true if condition met
-		// 5. Sleep 10ms and retry
-		// 6. Return false if deadline exceeded
 
+	for time.Now().Before(deadline) {
+		// Check if len(calls) >= expectedCount
+		callCount := len(*callsPtr)
+
+		if callCount >= expectedCount {
+			return true
+		}
+
+		// Sleep 10ms and retry
 		time.Sleep(10 * time.Millisecond)
 	}
+
+	// Return false if deadline exceeded
 	return false
 }
 
