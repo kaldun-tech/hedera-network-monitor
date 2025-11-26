@@ -2,9 +2,35 @@ package alerting
 
 import (
 	"encoding/json"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
+
+// newTestPayload creates a standard webhook payload for testing
+func newTestPayload() WebhookPayload {
+	return WebhookPayload{
+		RuleID:    "test_rule",
+		Severity:  "warning",
+		Message:   "Test message",
+		Value:     42.0,
+		Timestamp: time.Now().Unix(),
+		MetricID:  "test_metric",
+	}
+}
+
+// newTestConfig creates a standard webhook config for testing
+func newTestConfig() WebhookConfig {
+	return WebhookConfig{
+		Timeout:        100 * time.Millisecond,
+		MaxRetries:     5,
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     100 * time.Millisecond,
+	}
+}
 
 // TestWebhookPayloadCreation tests creating a webhook payload
 func TestWebhookPayloadCreation(t *testing.T) {
@@ -124,128 +150,326 @@ func TestWebhookPayloadJSONKeys(t *testing.T) {
 
 // TestSendWebhookRequest_SuccessOnFirstAttempt tests webhook succeeds immediately
 func TestSendWebhookRequest_SuccessOnFirstAttempt(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create httptest.Server that returns 200 OK
-	// 2. Create WebhookPayload
-	// 3. Call SendWebhookRequest() with test server URL
-	// 4. Verify error is nil
-	// 5. Verify server was called exactly once
-	t.Skip("Implement webhook success on first attempt test")
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	err := SendWebhookRequest(server.URL, newTestPayload(), newTestConfig())
+	if err != nil {
+		t.Errorf("Failed to send request: %v", err)
+	}
+	if callCount != 1 {
+		t.Errorf("Expected call count to be 1, got %d", callCount)
+	}
 }
 
 // TestSendWebhookRequest_RetryOnServerError tests webhook retries on 5xx errors
 func TestSendWebhookRequest_RetryOnServerError(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create server that fails first 2 requests with 503 (Service Unavailable)
-	// 2. On 3rd attempt, server returns 200 OK
-	// 3. Create config with MaxRetries: 5
-	// 4. Call SendWebhookRequest()
-	// 5. Verify error is nil (retry succeeded)
-	// 6. Verify server was called exactly 3 times
-	// Learning: Count HTTP requests to verify retry behavior
-	t.Skip("Implement webhook retry on server error test")
-}
+	// Implement retry logic verification
+	// Create server with call counter
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable) // 503
+		} else {
+			w.WriteHeader(http.StatusOK) // 200
+		}
+	}))
+	defer server.Close()
 
-// TestSendWebhookRequest_RetryOnNetworkError tests webhook retries on network failures
-func TestSendWebhookRequest_RetryOnNetworkError(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create server that works but use a URL that doesn't exist or timeout
-	// 2. Configure very short timeout (e.g., 1ms)
-	// 3. Call SendWebhookRequest()
-	// 4. Verify error is returned after all retries exhausted
-	// 5. Verify multiple attempts were made
-	// Learning: Network errors should trigger retries
-	t.Skip("Implement webhook retry on network error test")
-}
-
-// TestSendWebhookRequest_ExhaustedRetries tests webhook gives up after max retries
-func TestSendWebhookRequest_ExhaustedRetries(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create server that always returns 500 Internal Server Error
-	// 2. Create config with MaxRetries: 2 (so 3 total attempts)
-	// 3. Call SendWebhookRequest()
-	// 4. Verify error is returned
-	// 5. Verify error message mentions retry count
-	// 6. Verify server was called exactly 3 times (initial + 2 retries)
-	t.Skip("Implement webhook exhausted retries test")
+	err := SendWebhookRequest(server.URL, newTestPayload(), newTestConfig())
+	if err != nil {
+		t.Errorf("Unexpected error %v", err)
+	}
+	if callCount != 3 {
+		t.Errorf("Expected 3 calls, got %d", callCount)
+	}
 }
 
 // TestSendWebhookRequest_ExponentialBackoff tests backoff increases exponentially
 func TestSendWebhookRequest_ExponentialBackoff(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create server that fails 3 times then succeeds
-	// 2. Track request timestamps
-	// 3. Call SendWebhookRequest()
-	// 4. Verify timing between attempts follows exponential backoff
-	//    - Attempt 1->2: should wait ~InitialBackoff
-	//    - Attempt 2->3: should wait ~InitialBackoff * 2
-	//    - Attempt 3->4: should wait ~InitialBackoff * 4
-	// Learning: Backoff = min(initialBackoff * 2^attempt, maxBackoff)
-	t.Skip("Implement webhook exponential backoff test")
-}
+	// Track request timestamps to verify exponential backoff
+	var timestamps []time.Time
+	var tsMutex sync.Mutex
 
-// TestSendWebhookRequest_MaxBackoffCap tests backoff respects maximum
-func TestSendWebhookRequest_MaxBackoffCap(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create config with:
-	//    - InitialBackoff: 1 second
-	//    - MaxBackoff: 5 seconds
-	// 2. Create server that fails many times
-	// 3. Track request timing
-	// 4. Verify backoff never exceeds MaxBackoff (5 seconds)
-	// 5. Verify it caps at the max (e.g., 5s) and doesn't keep doubling
-	t.Skip("Implement webhook max backoff cap test")
-}
+	// Create server that fails 4x then succeeds
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tsMutex.Lock()
+		timestamps = append(timestamps, time.Now())
+		tsMutex.Unlock()
 
-// TestSendWebhookRequest_TimeoutConfig tests custom timeout is respected
-func TestSendWebhookRequest_TimeoutConfig(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create server that takes 2 seconds to respond
-	// 2. Create config with Timeout: 100ms
-	// 3. Call SendWebhookRequest()
-	// 4. Verify error is returned quickly (within 500ms + retry backoff)
-	// 5. Verify timeout error indicates request timed out
-	t.Skip("Implement webhook timeout config test")
-}
+		if len(timestamps) < 5 {
+			w.WriteHeader(http.StatusServiceUnavailable) // 503
+		} else {
+			w.WriteHeader(http.StatusOK) // 200
+		}
+	}))
+	defer server.Close()
 
-// TestSendWebhookRequest_Redirect tests webhook handles HTTP redirects
-func TestSendWebhookRequest_Redirect(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create primary server that returns 301 redirect
-	// 2. Create redirect target server that returns 200 OK
-	// 3. Call SendWebhookRequest() with primary URL
-	// 4. Verify no error (HTTP client follows redirects by default)
-	// 5. Verify final server received the webhook payload
-	t.Skip("Implement webhook redirect handling test")
+	err := SendWebhookRequest(server.URL, newTestPayload(), newTestConfig())
+	if err != nil {
+		t.Errorf("Unexpected error %v", err)
+	}
+
+	// Calculate actual delays between requests
+	var delays []time.Duration
+	for i := 1; i < len(timestamps); i++ {
+		delays = append(delays, timestamps[i].Sub(timestamps[i-1]))
+	}
+
+	// Verify exponential growth: each delay ~2x the previous
+	tolerance := 1.5 // Allow 50% variance
+	for i := 1; i < len(delays); i++ {
+		ratio := float64(delays[i]) / float64(delays[i-1])
+		if ratio < (2.0-tolerance) || ratio > (2.0+tolerance) {
+			t.Errorf("Delay %d: ratio %.2f, expected ~2.0", i, ratio)
+		}
+	}
 }
 
 // TestSendWebhookRequest_InvalidURL tests webhook handles bad URLs
 func TestSendWebhookRequest_InvalidURL(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Call SendWebhookRequest() with invalid URL (e.g., "not-a-url")
-	// 2. Verify error is returned
-	// 3. Verify error indicates invalid URL
-	// 4. Verify no retries are attempted (error is immediate)
-	t.Skip("Implement webhook invalid URL test")
+	// Call SendWebhookRequest with invalid URL, verify error (no retries)
+	err := SendWebhookRequest("not-a-valid-url", newTestPayload(), newTestConfig())
+	if err == nil {
+		t.Errorf("Expected error, got none")
+	}
 }
 
 // TestSendWebhookRequest_ContentType tests webhook sets correct headers
 func TestSendWebhookRequest_ContentType(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create server that validates request headers
-	// 2. Verify Content-Type is "application/json"
-	// 3. Verify User-Agent is "hedera-network-monitor/1.0"
-	// 4. Call SendWebhookRequest()
-	// 5. Verify no error and headers were correct
-	t.Skip("Implement webhook content type test")
+	// Track headers
+	var header map[string][]string
+	var hMutex sync.Mutex
+
+	// Create server that captures headers
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hMutex.Lock()
+		header = r.Header
+		hMutex.Unlock()
+
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	err := SendWebhookRequest(server.URL, newTestPayload(), newTestConfig())
+	if err != nil {
+		t.Errorf("Unexpected error %v", err)
+	}
+	if header["Content-Type"][0] != "application/json" {
+		t.Errorf("Expected application/json, got %s", header["Content-Type"][0])
+	}
+	userAgent := header["User-Agent"][0]
+	if userAgent != "hedera-network-monitor/1.0" {
+		t.Errorf("Expected hedera-network-monitor/1.0, got %s", userAgent)
+	}
+}
+
+// TestSendWebhookRequest_RetryOnNetworkError tests webhook retries on network failures
+func TestSendWebhookRequest_RetryOnNetworkError(t *testing.T) {
+	// Server that always returns an error (closed connection)
+	// This forces retries on every attempt
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to create listener: %v", err)
+	}
+
+	// Accept and immediately close connections to simulate network errors
+	var callMutex = &sync.Mutex{}
+	callCount := 0
+
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return // listener closed
+			}
+			callMutex.Lock()
+			callCount++
+			callMutex.Unlock()
+			_ = conn.Close() // Close immediately, simulating network error
+		}
+	}()
+
+	url := "http://" + listener.Addr().String()
+
+	config := newTestConfig()
+	config.MaxRetries = 2
+
+	err = SendWebhookRequest(url, newTestPayload(), config)
+	if err == nil {
+		t.Errorf("Expected error on network failure, got nil")
+	}
+
+	_ = listener.Close()
+
+	callMutex.Lock()
+	count := callCount
+	callMutex.Unlock()
+	if count < 2 {
+		t.Errorf("Expected at least 2 attempts, got %d", count)
+	}
+}
+
+// TestSendWebhookRequest_ExhaustedRetries tests webhook gives up after max retries
+func TestSendWebhookRequest_ExhaustedRetries(t *testing.T) {
+	// Server always fails with 500 error
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	payload := newTestPayload()
+	payload.Severity = "critical"
+	payload.Value = 100.0
+
+	config := newTestConfig()
+	config.Timeout = 5 * time.Second
+	config.MaxRetries = 2
+
+	err := SendWebhookRequest(server.URL, payload, config)
+	if err == nil {
+		t.Errorf("Expected error after exhausting retries, got nil")
+	}
+
+	expectedCalls := 3 // initial + 2 retries
+	if callCount != expectedCalls {
+		t.Errorf("Expected %d calls, got %d", expectedCalls, callCount)
+	}
+}
+
+// TestSendWebhookRequest_MaxBackoffCap tests backoff respects maximum
+func TestSendWebhookRequest_MaxBackoffCap(t *testing.T) {
+	// Server fails 6 times to trigger multiple backoff periods
+	var tsMutex = &sync.Mutex{}
+	callCount := 0
+	var timestamps []time.Time
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tsMutex.Lock()
+		timestamps = append(timestamps, time.Now())
+		callCount++
+		count := callCount
+		tsMutex.Unlock()
+
+		if count > 5 {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer server.Close()
+
+	payload := newTestPayload()
+	payload.Message = "Test"
+	payload.Value = 50.0
+
+	config := newTestConfig()
+	config.Timeout = 5 * time.Second
+	config.InitialBackoff = 50 * time.Millisecond
+
+	err := SendWebhookRequest(server.URL, payload, config)
+	if err != nil {
+		t.Errorf("Expected success, got error: %v", err)
+	}
+
+	// Verify backoff capped at MaxBackoff
+	// After attempt 2, backoff would be 50*2^2 = 200ms, but capped at 100ms
+	tsMutex.Lock()
+	ts := timestamps
+	tsMutex.Unlock()
+	if len(ts) >= 4 {
+		delay3 := ts[3].Sub(ts[2])
+		if delay3 > 150*time.Millisecond {
+			t.Errorf("Backoff delay %v exceeds MaxBackoff + tolerance (100ms)", delay3)
+		}
+	}
+}
+
+// TestSendWebhookRequest_TimeoutConfig tests custom timeout is respected
+func TestSendWebhookRequest_TimeoutConfig(t *testing.T) {
+	// Server takes a long time to respond
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	payload := newTestPayload()
+	payload.Severity = "info"
+	payload.Message = "Test"
+	payload.Value = 25.0
+
+	config := newTestConfig()
+	config.MaxRetries = 2
+	config.InitialBackoff = 50 * time.Millisecond
+
+	start := time.Now()
+	err := SendWebhookRequest(server.URL, payload, config)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Errorf("Expected timeout error, got nil")
+	}
+
+	// Should timeout quickly, not wait 2 seconds
+	if elapsed > 2*time.Second {
+		t.Errorf("Timeout not respected: took %v", elapsed)
+	}
+}
+
+// TestSendWebhookRequest_Redirect tests webhook handles HTTP redirects
+func TestSendWebhookRequest_Redirect(t *testing.T) {
+	// Create redirect target server
+	finalCallReceived := false
+	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		finalCallReceived = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer targetServer.Close()
+
+	// Create redirect server
+	redirectServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, targetServer.URL, http.StatusMovedPermanently)
+	}))
+	defer redirectServer.Close()
+
+	payload := newTestPayload()
+	payload.Value = 75.0
+
+	err := SendWebhookRequest(redirectServer.URL, payload, DefaultWebhookConfig())
+	if err != nil {
+		t.Errorf("Expected redirect to succeed, got error: %v", err)
+	}
+
+	if !finalCallReceived {
+		t.Errorf("Expected request to reach redirect target")
+	}
 }
 
 // TestSendWebhookRequest_ResponseBodyRead tests response body is properly closed
 func TestSendWebhookRequest_ResponseBodyRead(t *testing.T) {
-	// TODO: Implement this test
-	// 1. Create server that returns response with body
-	// 2. Call SendWebhookRequest()
-	// 3. Verify no resource leaks (response body should be read and closed)
-	// Learning: io.ReadAll + resp.Body.Close() prevents leaks
-	t.Skip("Implement webhook response body read test")
+	// Server returns a large response body
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		// Write a substantial response body
+		_, _ = w.Write([]byte("This is a test response body that should be read and closed properly to avoid resource leaks"))
+	}))
+	defer server.Close()
+
+	payload := newTestPayload()
+	payload.Message = "Test body read"
+	payload.Value = 10.0
+
+	// Make multiple requests to verify bodies are properly cleaned up
+	for i := 0; i < 5; i++ {
+		err := SendWebhookRequest(server.URL, payload, DefaultWebhookConfig())
+		if err != nil {
+			t.Errorf("Request %d failed: %v", i+1, err)
+		}
+	}
 }

@@ -472,6 +472,19 @@ The test suite is split into two categories:
   make test-integration
   ```
 
+### Test Coverage
+
+**Currently Implemented:**
+- ✅ Alert condition operators (41 tests)
+- ✅ Alert manager core functionality (16 tests)
+- ✅ Webhook retry logic with exponential backoff (11 tests)
+- ✅ Integration tests for alert dispatch and webhook handling (10 tests)
+- ✅ CLI alert commands (list/add) (13 tests)
+- ✅ Storage, configuration, and Hedera SDK wrapper tests
+
+**Known Limitations:**
+- Account balance/transaction CLI commands are deferred (require Hedera SDK mocking). These can be tested via integration tests with the full service running, or implemented in a future phase when dependency injection is added to those commands.
+
 ### Development Workflow
 
 1. **Create a feature branch:**

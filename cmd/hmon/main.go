@@ -103,7 +103,7 @@ var accountTransactionsCmd = &cobra.Command{
 var networkCmd = &cobra.Command{
 	Use:   "network",
 	Short: "Query network information",
-	Long:  "Query network status and information from the Hedera blockchain",
+	Long:  "Query network status and information from Hedera",
 }
 
 // networkStatusCmd represents the network status command

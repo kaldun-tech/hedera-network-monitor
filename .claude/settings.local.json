@@ -23,7 +23,9 @@
       "Bash(make lint:*)",
       "Bash(timeout 30 go test:*)",
       "Bash(timeout 20 go test:*)",
-      "Bash(timeout 60 go test:*)"
+      "Bash(timeout 60 go test:*)",
+      "Bash(make test-unit:*)",
+      "Bash(make build:*)"
     ],
     "deny": [],
     "ask": []

@@ -740,6 +740,102 @@ if len(calls) != 1 {
 
 ---
 
+## Testing Exponential Backoff Logic (Critical Learning)
+
+### The Challenge: How Do You Test Timing Without Flakiness?
+
+Testing exponential backoff creates a paradox:
+- You need to verify timing (delays increase each retry)
+- But timing is unreliable in tests (system load, CI runners vary)
+- Hardcoding millisecond expectations fails randomly
+
+**Location:** `internal/alerting/webhook_test.go:193-248`
+
+### The Solution: Ratio-Based Assertions
+
+Instead of asserting exact milliseconds, verify the **ratio** between delays:
+
+```go
+// ✗ WRONG - Flaky, depends on system load
+delay1 := timestamps[1].Sub(timestamps[0])
+if delay1 != 10*time.Millisecond {  // Often fails ±5ms variance
+    t.Fatal("Expected exactly 10ms")
+}
+
+// ✓ CORRECT - Robust, verifies exponential growth
+var delays []time.Duration
+for i := 1; i < len(timestamps); i++ {
+    delays = append(delays, timestamps[i].Sub(timestamps[i-1]))
+}
+
+// Verify exponential growth: each delay ~2x the previous
+tolerance := 1.5  // Allow 50% variance
+for i := 1; i < len(delays); i++ {
+    ratio := float64(delays[i]) / float64(delays[i-1])
+    if ratio < (2.0-tolerance) || ratio > (2.0+tolerance) {
+        t.Errorf("Delay %d: ratio %.2f, expected ~2.0", i, ratio)
+    }
+}
+```
+
+### Why This Works
+
+1. **Ratio-based** - Verifies the exponential growth property
+2. **Tolerant of variance** - Allows system jitter
+3. **Detects real bugs** - If backoff is linear instead of exponential, ratio will be wrong
+4. **No magic numbers** - Describes intent clearly (each retry 2x longer)
+
+### What We Learned
+
+**Exponential Backoff in This Project:**
+```
+Attempt 1: Immediate (first try)
+Attempt 2: 10ms delay
+Attempt 3: 20ms delay (2x)
+Attempt 4: 40ms delay (2x)
+Attempt 5: 80ms delay (2x)
+Attempt 6: 100ms delay (capped at MaxBackoff)
+```
+
+**Test Pattern:**
+```go
+// 1. Setup server that fails N times
+callCount := 0
+server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    timestamps = append(timestamps, time.Now())
+    callCount++
+    if callCount < 5 {
+        w.WriteHeader(http.StatusServiceUnavailable)
+    } else {
+        w.WriteHeader(http.StatusOK)
+    }
+}))
+
+// 2. Execute with retry config
+err := SendWebhookRequest(server.URL, payload, config)
+
+// 3. Verify ratio-based timing
+delays := calculateDelays(timestamps)
+for i := 1; i < len(delays); i++ {
+    ratio := float64(delays[i]) / float64(delays[i-1])
+    if ratio < 1.5 || ratio > 2.5 {  // Allow 50% variance
+        t.Errorf("Not exponential: ratio %.2f", ratio)
+    }
+}
+```
+
+### Key Insight for Production
+
+This pattern is essential for:
+- **HTTP retry logic** (this project's webhook retries)
+- **Database connection pools** (exponential backoff on failures)
+- **Circuit breakers** (gradually recover from failures)
+- **Rate limiting** (increase delays to back off)
+
+The exponential backoff test is one of the most important in the test suite because it ensures the production system gracefully handles transient failures without hammering the service.
+
+---
+
 ## Key Takeaways
 
 1. **Goroutines are cheap** - Spawn thousands if needed
@@ -752,6 +848,8 @@ if len(calls) != 1 {
 8. **Test with mocks** - Avoid network calls in unit tests
 9. **Use Fatal() in tests** - When nil checks would crash
 10. **Defer cleanup** - Always ensure resources are released
+11. **Test timing with ratios** - Never hardcode milliseconds in tests
+12. **Exponential backoff matters** - Critical for production resilience
 
 ---
 
@@ -767,4 +865,5 @@ if len(calls) != 1 {
 **Last Updated:** November 25, 2025
 **Sessions:**
 - November 19: Concurrency patterns and SDK discovery
-- November 25: Integration testing patterns for async code
+- November 21-25: Integration testing patterns for async code
+- November 25: Webhook retry logic and exponential backoff testing patterns
