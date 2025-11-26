@@ -1,6 +1,15 @@
 #!/bin/bash
 # Pre-push checks that require the monitor service running
 # Run this before pushing to verify the system works end-to-end
+#
+# To start the monitor service for online checks:
+#   1. Build: make build
+#   2. Ensure config/config.yaml exists (copy from config.example.yaml if needed)
+#   3. Start service: ./monitor
+#   4. In another terminal, run this script: ./scripts/check-online.sh
+#
+# Optional: Set API_URL and TEST_ACCOUNT environment variables to override defaults:
+#   API_URL=http://localhost:9000 TEST_ACCOUNT=0.0.1000 ./scripts/check-online.sh
 
 set -e
 

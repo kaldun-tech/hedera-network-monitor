@@ -12,8 +12,11 @@ This document captures interesting patterns, discoveries, and best practices dis
 3. [Error Handling Patterns](#error-handling-patterns)
 4. [Interface-Based Design](#interface-based-design)
 5. [Testing Patterns](#testing-patterns)
-6. [Go JSON Serialization](#go-json-serialization)
-7. [Hedera SDK Discoveries](#hedera-sdk-discoveries)
+6. [Testing Exponential Backoff Logic](#testing-exponential-backoff-logic-critical-learning)
+7. [Testing Stateful Mock APIs with Shared Slices](#testing-stateful-mock-apis-with-shared-slices)
+8. [JSON Encoding Gotchas in Go](#json-encoding-gotchas-in-go)
+9. [Go JSON Serialization](#go-json-serialization)
+10. [Hedera SDK Discoveries](#hedera-sdk-discoveries)
 
 ---
 
@@ -836,6 +839,206 @@ The exponential backoff test is one of the most important in the test suite beca
 
 ---
 
+## Testing Stateful Mock APIs with Shared Slices
+
+### The Challenge: How Do You Test State Mutations Across Multiple Requests?
+
+When testing workflows that involve multiple API calls (e.g., "list empty, add item, list has item"), you need a mock server that maintains state.
+
+**Location:** `cmd/hmon/main_test.go:278-321 (TestAlertsIntegration_ListThenAdd)`
+
+### The Solution: Shared Slice in Closure
+
+Instead of a complex stateful server, use a simple pattern: declare the state outside the handler function, and let the closure capture it:
+
+```go
+func TestAlertsIntegration_ListThenAdd(t *testing.T) {
+    var rules []AlertRuleResponse  // State shared across all requests
+
+    server := createMockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+        if r.Method == http.MethodGet {
+            // Read the current state
+            response := AlertListResponse{Alerts: rules, Count: len(rules)}
+            w.Header().Set("Content-Type", "application/json")
+            w.WriteHeader(http.StatusOK)
+            _ = json.NewEncoder(w).Encode(response)
+        } else if r.Method == http.MethodPost {
+            // Mutate the state
+            var newRule AlertRuleResponse
+            _ = json.NewDecoder(r.Body).Decode(&newRule)
+            newRule.ID = "rule1"
+            rules = append(rules, newRule)  // State persists!
+            w.Header().Set("Content-Type", "application/json")
+            w.WriteHeader(http.StatusCreated)
+            _ = json.NewEncoder(w).Encode(newRule)
+        }
+    })
+    defer server.Close()
+
+    setGlobalFlags(server.URL, "info")
+
+    // List empty rules
+    err := handleAlertsList()
+    if err != nil {
+        t.Errorf("First list failed: %v", err)
+    }
+
+    // Add a rule (mutates 'rules' slice)
+    err = handleAlertAdd(createValidRuleJSON())
+    if err != nil {
+        t.Errorf("Add failed: %v", err)
+    }
+
+    // List again - now 'rules' has the new rule
+    err = handleAlertsList()
+    if err != nil {
+        t.Errorf("Second list failed: %v", err)
+    }
+}
+```
+
+### Why This Works
+
+1. **Closure captures state** - The `rules` slice is captured by the handler function
+2. **State persists** - Each request handler can read and modify the same slice
+3. **No global state** - The state is local to the test function (not a global variable)
+4. **Simple and clear** - No complex server logic needed
+
+### When to Use This Pattern
+
+- Testing workflows: "Create then read", "List then modify"
+- Verifying state changes: "Add item, verify count increases"
+- Multi-step scenarios: Anything that requires state to persist across requests
+- Testing API side effects: Ensuring mutations are reflected in subsequent reads
+
+### Contrast with Alternatives
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Shared slice closure** (our pattern) | Simple, clear, local scope | Not suitable for concurrent requests |
+| **Global map** | Persistent, re-usable | Global state, pollution, harder to test |
+| **Database mock** | Most realistic | Overkill for simple state, slow |
+| **Complex server struct** | Can be made thread-safe | Boilerplate-heavy, obscures test intent |
+
+---
+
+## JSON Encoding Gotchas in Go
+
+### Discovery: Encoding a JSON String vs a Struct
+
+**Problem encountered:**
+
+```go
+// ❌ WRONG - This double-wraps the JSON
+w.WriteHeader(http.StatusCreated)
+_ = json.NewEncoder(w).Encode(createValidRuleJSON())
+// Result: "{\\"name\\":\\"Test\\",\\"metric_name\\":\\"account_balance\\"...}"
+// The entire JSON string is treated as a string value and re-encoded!
+```
+
+The issue: `json.NewEncoder(w).Encode()` serializes whatever you give it. If you give it a JSON string, it serializes the string (escaping quotes and adding quotes around it).
+
+### The Solution: Encode Structs, Not Strings
+
+Always encode the actual data structure:
+
+```go
+// ✓ CORRECT - Encode the struct directly
+rule := AlertRuleResponse{
+    ID:         "rule1",
+    Name:       "Test Rule",
+    MetricName: "account_balance",
+    Condition:  ">",
+    Threshold:  1000000000,
+    Severity:   "warning",
+}
+w.Header().Set("Content-Type", "application/json")
+w.WriteHeader(http.StatusCreated)
+_ = json.NewEncoder(w).Encode(rule)
+// Result: {"id":"rule1","name":"Test Rule",...}
+// Clean, valid JSON
+```
+
+### Why Capitalization Matters in Go JSON
+
+**By default**, only **exported** (capitalized) struct fields are included in JSON:
+
+```go
+// Only these are exported (appear in JSON by default)
+type User struct {
+    Name   string  // Capital N - EXPORTED
+    Email  string  // Capital E - EXPORTED
+    Age    int     // Capital A - EXPORTED
+}
+
+// These are NOT exported (hidden from JSON)
+type User struct {
+    password string  // lowercase p - PRIVATE
+    internalID string // lowercase i - PRIVATE
+}
+
+// Use struct tags to control JSON key names
+type User struct {
+    Name   string `json:"name"`    // Output as "name" (lowercase)
+    Email  string `json:"email"`   // Output as "email" (lowercase)
+    Age    int    `json:"age"`     // Output as "age" (lowercase)
+}
+```
+
+### The Rule: Match Struct Fields to JSON Keys
+
+| Go Code | JSON Output | Rule |
+|---------|-------------|------|
+| `Name string` | No JSON field | ❌ lowercase not included |
+| `name string` | ❌ Error/no output | ❌ private not exported |
+| `Name string` | `{"Name":"..."}` | Default (capitalized) |
+| `Name string json:"name"` | `{"name":"..."}` | Tag overrides default |
+
+### Common Patterns
+
+**Pattern 1: Keep capitalization for internal APIs**
+```go
+type AlertRuleResponse struct {
+    ID         string  `json:"id"`
+    Name       string  `json:"name"`
+    MetricName string  `json:"metric_name"`
+}
+```
+
+**Pattern 2: Omit empty fields**
+```go
+type AlertRuleResponse struct {
+    ID          string `json:"id"`
+    Description string `json:"description,omitempty"`  // Omit if empty
+}
+```
+
+**Pattern 3: Make fields optional**
+```go
+type AlertRuleResponse struct {
+    ID          string `json:"id"`
+    Description string `json:"description,omitempty"`
+    Tags        []string `json:"tags,omitempty"`
+}
+```
+
+### Lesson Applied in This Project
+
+When writing the CLI tests, we discovered the encoding issue:
+
+```go
+// First attempt (WRONG):
+_ = json.NewEncoder(w).Encode(createValidRuleJSON())
+
+// Fixed version (RIGHT):
+rule := AlertRuleResponse{...}
+_ = json.NewEncoder(w).Encode(rule)
+```
+
+This is a common mistake when testing: confusing the data (struct) with the serialization (JSON string).
+
+---
+
 ## Key Takeaways
 
 1. **Goroutines are cheap** - Spawn thousands if needed
@@ -850,6 +1053,8 @@ The exponential backoff test is one of the most important in the test suite beca
 10. **Defer cleanup** - Always ensure resources are released
 11. **Test timing with ratios** - Never hardcode milliseconds in tests
 12. **Exponential backoff matters** - Critical for production resilience
+13. **Shared slices in closures** - Simple pattern for stateful mock APIs
+14. **Encode structs, not strings** - json.Encoder works on data, not serialized JSON
 
 ---
 
@@ -862,8 +1067,9 @@ The exponential backoff test is one of the most important in the test suite beca
 
 ---
 
-**Last Updated:** November 25, 2025
+**Last Updated:** November 26, 2025
 **Sessions:**
 - November 19: Concurrency patterns and SDK discovery
 - November 21-25: Integration testing patterns for async code
 - November 25: Webhook retry logic and exponential backoff testing patterns
+- November 26: Stateful mock APIs with shared slices and JSON encoding patterns

@@ -479,8 +479,15 @@ The test suite is split into two categories:
 - ✅ Alert manager core functionality (16 tests)
 - ✅ Webhook retry logic with exponential backoff (11 tests)
 - ✅ Integration tests for alert dispatch and webhook handling (10 tests)
-- ✅ CLI alert commands (list/add) (13 tests)
+- ✅ CLI alert commands (list, add, integration workflows) (13 tests)
 - ✅ Storage, configuration, and Hedera SDK wrapper tests
+- ✅ **Phase 4 Complete:** All planned test phases fully implemented
+
+**Test Statistics:**
+- **Total:** 100+ unit tests + 10 integration tests
+- **Unit Test Speed:** ~4 seconds (fast feedback on commits)
+- **Integration Test Speed:** ~30-60 seconds (comprehensive validation before push)
+- **Linter Status:** Zero warnings
 
 **Known Limitations:**
 - Account balance/transaction CLI commands are deferred (require Hedera SDK mocking). These can be tested via integration tests with the full service running, or implemented in a future phase when dependency injection is added to those commands.
@@ -492,28 +499,28 @@ The test suite is split into two categories:
    git checkout -b feature/your-feature
    ```
 
-2. **Make changes and test (fast path):**
+2. **Make changes and test (fast path - run often):**
    ```bash
-   make test-unit        # Quick feedback
-   make lint
-   ./scripts/check-offline.sh  # Full pre-commit checks
+   ./scripts/check-offline.sh  # Format, lint, unit tests, build (~10-20s)
    ```
 
-3. **Before pushing, run full tests:**
+3. **Before pushing, run full verification:**
    ```bash
-   make test             # Runs both unit + integration
+   # Terminal 1: Start the monitor
+   ./monitor --config config/config.yaml
+
+   # Terminal 2: Run online checks
+   ./scripts/check-online.sh  # Full integration verification (~30-60s)
    ```
 
-4. **Build and verify:**
+4. **Commit and push:**
    ```bash
-   make build
-   ```
-
-5. **Commit and push:**
-   ```bash
-   git commit -am "Add your feature description"
+   git add .
+   git commit -m "Your feature description"
    git push origin feature/your-feature
    ```
+
+See [Pre-Push Verification](#pre-push-verification) for detailed testing instructions.
 
 ### Common Development Tasks
 
@@ -581,6 +588,30 @@ go build -o testgen ./cmd/testgen
 - **High Transaction Rate**: Run testgen with `-count 20 -interval 2` to send many transactions quickly
 - **No Recent Transactions**: Run testgen, then wait without sending more transactions
 - **Network Unavailable**: Depends on testnet state (hard to trigger manually)
+
+### Pre-Push Verification
+
+Before pushing changes, run the full test suite to ensure everything works end-to-end:
+
+**Fast checks (run on every commit):**
+```bash
+./scripts/check-offline.sh
+# Runs: format, lint, unit tests, build
+# Time: ~10-20 seconds
+```
+
+**Full verification (run before pushing):**
+```bash
+# In one terminal, start the monitor service
+./monitor --config config/config.yaml
+
+# In another terminal, run online checks
+./scripts/check-online.sh
+# Verifies: API health, metrics collection, alert rules, CLI functionality
+# Time: ~30-60 seconds
+```
+
+For details on the test infrastructure, see [`scripts/README.md`](scripts/README.md).
 
 ## Contributing
 
