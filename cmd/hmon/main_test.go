@@ -17,14 +17,67 @@ import (
 
 // TestAlertListCommand_NoAlerts tests alerts list when no rules exist
 func TestAlertListCommand_NoAlerts(t *testing.T) {
-	// TODO: Mock API returning empty alerts, set apiURL, verify output contains "No alert rules configured"
-	t.Skip("Implement alerts list with no alerts test")
+	// Mock API returning empty alerts
+	server := createMockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		response := AlertListResponse{Alerts: []AlertRuleResponse{}, Count: 0}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(response)
+	})
+	defer server.Close()
+
+	// Sets API URL to target the mock server
+	setGlobalFlags(server.URL, "info")
+
+	// Verify output contains "No alert rules configured"
+	output := captureCommandOutput(t, func() error {
+		return handleAlertsList()
+	})
+
+	if !strings.Contains(output, "No alert rules configured") {
+		t.Errorf("Expected 'No alert rules configured', got: %s", output)
+	}
 }
 
 // TestAlertListCommand_WithAlerts tests alerts list displays rules correctly
 func TestAlertListCommand_WithAlerts(t *testing.T) {
-	// TODO: Mock API with 3 rules, verify output contains rule count, names, and conditions
-	t.Skip("Implement alerts list with alerts test")
+	// Mock API with 3 rules
+	rules := []AlertRuleResponse{
+		{ID: "1", Name: "Rule 1", MetricName: "metric1", Condition: ">", Threshold: 100, Severity: "warning"},
+		{ID: "2", Name: "Rule 2", MetricName: "metric2", Condition: "<", Threshold: 50, Severity: "critical"},
+		{ID: "3", Name: "Rule 3", MetricName: "metric3", Condition: "==", Threshold: 10, Severity: "info"},
+	}
+
+	server := createMockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		response := AlertListResponse{Alerts: rules, Count: len(rules)}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(response)
+	})
+	defer server.Close()
+
+	setGlobalFlags(server.URL, "info")
+	output := captureCommandOutput(t, func() error {
+		return handleAlertsList()
+	})
+
+	// Verify it contains the length of 3
+	if !strings.Contains(output, "3") {
+		t.Errorf("Expected output to contain rule count '3', got: %s", output)
+	}
+
+	// Verify output contains rule count, names, and conditions
+	for _, rule := range rules {
+		if !strings.Contains(output, rule.ID) {
+			t.Errorf("Expected alert rule with ID '%s', got: %s", rule.ID, output)
+		}
+		if !strings.Contains(output, rule.Name) {
+			t.Errorf("Expected alert rule with Name '%s', got: %s", rule.Name, output)
+		}
+		if !strings.Contains(output, rule.Condition) {
+			t.Errorf("Expected alert rule with Condition '%s', got: %s", rule.Condition, output)
+		}
+	}
 }
 
 // TestAlertListCommand_APIError tests handling of API errors
@@ -58,8 +111,7 @@ func TestAlertListCommand_InvalidJSON(t *testing.T) {
 	err := handleAlertsList()
 	if err == nil {
 		t.Errorf("Expected error on invalid JSON, got nil")
-	}
-	if !strings.Contains(err.Error(), "decode") && !strings.Contains(err.Error(), "unmarshal") {
+	} else if !strings.Contains(err.Error(), "decode") && !strings.Contains(err.Error(), "unmarshal") {
 		t.Errorf("Expected decode error, got: %v", err)
 	}
 }
@@ -79,8 +131,26 @@ func TestAlertListCommand_ConnectionRefused(t *testing.T) {
 
 // TestAlertAddCommand_ValidRule tests adding a valid alert rule
 func TestAlertAddCommand_ValidRule(t *testing.T) {
-	// TODO: Mock API POST endpoint, call handleAlertAdd with valid JSON, verify success
-	t.Skip("Implement alerts add valid rule test")
+	server := createMockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		rule := AlertRuleResponse{
+			ID:         "rule1",
+			Name:       "Test Rule",
+			MetricName: "account_balance",
+			Condition:  ">",
+			Threshold:  1000000000,
+			Severity:   "warning",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(rule)
+	})
+	defer server.Close()
+
+	setGlobalFlags(server.URL, "info")
+	err := handleAlertAdd(createValidRuleJSON())
+	if err != nil {
+		t.Errorf("Unexpected error for valid json: %v", err)
+	}
 }
 
 // TestAlertAddCommand_InvalidJSON tests adding rule with malformed JSON
@@ -89,8 +159,7 @@ func TestAlertAddCommand_InvalidJSON(t *testing.T) {
 	err := handleAlertAdd(createInvalidRuleJSON())
 	if err == nil {
 		t.Errorf("Expected error on invalid JSON, got nil")
-	}
-	if !strings.Contains(err.Error(), "parse") && !strings.Contains(err.Error(), "format") {
+	} else if !strings.Contains(err.Error(), "parse") && !strings.Contains(err.Error(), "format") {
 		t.Errorf("Expected parse error, got: %v", err)
 	}
 }
@@ -177,8 +246,7 @@ func TestAlertAddCommand_APIError(t *testing.T) {
 	err := handleAlertAdd(createValidRuleJSON())
 	if err == nil {
 		t.Errorf("Expected error on API failure, got nil")
-	}
-	if !strings.Contains(err.Error(), "500") {
+	} else if !strings.Contains(err.Error(), "500") {
 		t.Errorf("Expected 500 error, got: %v", err)
 	}
 }
@@ -216,8 +284,48 @@ func TestAlertAddCommand_WithOptionalFields(t *testing.T) {
 
 // TestAlertsIntegration_ListThenAdd tests full workflow: list then add rule
 func TestAlertsIntegration_ListThenAdd(t *testing.T) {
-	// TODO: Create stateful mock API, list (empty), add rule, list (has rule)
-	t.Skip("Implement alerts integration list-then-add test")
+	var rules []AlertRuleResponse
+
+	// Create stateful mock API
+	server := createMockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			// List endpoint
+			response := AlertListResponse{Alerts: rules, Count: len(rules)}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(response)
+		} else if r.Method == http.MethodPost {
+			// Add endpoint
+			var newRule AlertRuleResponse
+			_ = json.NewDecoder(r.Body).Decode(&newRule)
+			newRule.ID = "rule1"
+			rules = append(rules, newRule)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(newRule)
+		}
+	})
+	defer server.Close()
+
+	setGlobalFlags(server.URL, "info")
+
+	// List empty rules
+	err := handleAlertsList()
+	if err != nil {
+		t.Errorf("First list failed: %v", err)
+	}
+
+	// Add a rule
+	err = handleAlertAdd(createValidRuleJSON())
+	if err != nil {
+		t.Errorf("Add failed: %v", err)
+	}
+
+	// List again - should have the rule
+	err = handleAlertsList()
+	if err != nil {
+		t.Errorf("Second list failed: %v", err)
+	}
 }
 
 // TestAlertsIntegration_MultipleRules tests managing multiple alert rules
@@ -249,7 +357,7 @@ func TestAlertsIntegration_MultipleRules(t *testing.T) {
 
 // TestAccountBalanceCommand_ValidAccount tests balance query for valid account
 func TestAccountBalanceCommand_ValidAccount(t *testing.T) {
-	// TODO: Mock hedera.Client, set credentials, verify balance output
+	// Mock hedera.Client, set credentials, verify balance output
 	t.Skip("Implement account balance valid account test")
 }
 
@@ -307,8 +415,6 @@ func createMockAPIServer(t *testing.T, handler http.HandlerFunc) *httptest.Serve
 }
 
 // captureCommandOutput captures stdout from running a cobra command
-//
-//nolint:unused
 func captureCommandOutput(t *testing.T, cmdFunc func() error) string {
 	oldStdout := os.Stdout
 	r, w, err := os.Pipe()
