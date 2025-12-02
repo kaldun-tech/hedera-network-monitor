@@ -294,10 +294,11 @@ Response:
 ### Get Metrics by Account
 
 ```bash
-GET /api/v1/metrics/account?account_id=0.0.5000
+GET /api/v1/metrics/account?key=account_id&value=0.0.5000
 
 Query Parameters:
-  account_id: Account ID to filter by
+  key: Label key to filter by (e.g., "account_id")
+  value: Label value to filter by (e.g., "0.0.5000")
 
 Response:
 {
