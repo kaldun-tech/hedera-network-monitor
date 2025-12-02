@@ -164,12 +164,12 @@ make clean
 
 1. **Copy example configuration:**
    ```bash
-   cp config.example.yaml config.yaml
+   cp config/config.example.yaml config/config.yaml
    ```
 
 2. **Edit configuration with your settings:**
    ```bash
-   nano config.yaml
+   nano config/config.yaml
    ```
 
 3. **Key configuration items:**
@@ -182,7 +182,7 @@ make clean
 
 ### Configuration File Structure
 
-See `config.example.yaml` for a complete example with inline documentation.
+See `config/config.example.yaml` for a complete example with inline documentation.
 
 Key sections:
 - **network**: Hedera network connection settings

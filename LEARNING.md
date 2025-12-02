@@ -711,7 +711,7 @@ test: test-unit test-integration    # Run both
 
 1. **Don't fight async waits** - You can't make async tests truly fast
 2. **Mock or tag, don't hack timeouts** - Never use random sleeps to "fix" flakiness
-3. **Fast feedback loop is critical** - Developers need < 5 seconds per commit
+3. **Fast feedback loop is critical** - Developers need unit tests to run in < 5 seconds per commit
 4. **Async tests require integration** - They're not "unit" tests by definition
 5. **CI can afford to wait** - 60 seconds in CI is acceptable if local is fast
 
