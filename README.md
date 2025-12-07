@@ -342,7 +342,7 @@ hmon account balance 0.0.5000
 
 **Query via API:**
 ```bash
-curl http://localhost:8080/api/v1/metrics/account?account_id=0.0.5000
+curl http://localhost:8080/api/v1/metrics?name=account_balance&limit=10
 ```
 
 ### Multi-Account Monitoring
