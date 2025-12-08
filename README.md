@@ -47,36 +47,28 @@ Watch a brief explanation of the project: [Loom Video](https://www.loom.com/shar
 ## Architecture
 
 ```mermaid
-graph TB
-    subgraph "Hedera Network Monitor"
-        subgraph "Monitor Service (cmd/monitor/main.go)"
-            Collectors[Collectors<br/>- Account<br/>- Network]
-            AlertMgr[Alert Manager<br/>- Rules<br/>- Webhooks]
-            Storage[Storage<br/>Memory MVP<br/>- Metrics]
+graph LR
+    subgraph Monitor["Monitor Service Daemon"]
+        direction TB
+        C[Collectors]
+        S[Storage]
+        A[Alert Manager]
 
-            Collectors --> Storage
-            Storage --> AlertMgr
-        end
-
-        API[API Server<br/>:8080]
-        Storage --> API
-        AlertMgr --> API
-
-        CLI[CLI Tool hmon<br/>cmd/hmon/main.go]
-        CLI -.-> API
+        C --> S
+        S --> A
     end
 
-    Hedera[Hedera Network<br/>SDK Queries]
-    Webhooks[Webhooks<br/>Slack, Discord, etc.]
+    API[API Server<br/>:8080]
+    CLI[CLI Tool]
 
-    Collectors --> Hedera
-    AlertMgr --> Webhooks
+    Hedera[Hedera Network]
+    Webhooks[Webhooks]
 
-    style Collectors fill:#e1f5ff
-    style AlertMgr fill:#fff4e1
-    style Storage fill:#f0e1ff
-    style API fill:#e1ffe1
-    style CLI fill:#ffe1e1
+    C -.->|query| Hedera
+    S --> API
+    A --> API
+    A -.->|notify| Webhooks
+    CLI -->|query| API
 ```
 
 ### Component Overview
