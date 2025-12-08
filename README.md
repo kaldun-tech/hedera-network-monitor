@@ -2,6 +2,10 @@
 
 A comprehensive Go-based monitoring and alerting tool for the Hedera blockchain network. Monitor account balances, transactions, and network health with real-time alerts and a REST API.
 
+## Video Walkthrough
+
+Watch a brief explanation of the project: [Loom Video](https://www.loom.com/share/dc83480fba0f4a7ca9dce4094ac6ed75)
+
 ## Table of Contents
 
 - [Features](#features)
@@ -42,44 +46,37 @@ A comprehensive Go-based monitoring and alerting tool for the Hedera blockchain 
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Hedera Network Monitor                    │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │           Monitor Service (Daemon)                   │   │
-│  │  cmd/monitor/main.go                                 │   │
-│  └────────────────────┬─────────────────────────────────┘   │
-│                       │                                      │
-│       ┌───────────────┼───────────────┐                     │
-│       │               │               │                     │
-│  ┌────▼────┐  ┌──────▼────┐  ┌──────▼────┐               │
-│  │Collectors│  │Alert      │  │Storage    │               │
-│  │          │  │Manager    │  │(Memory)   │               │
-│  │- Account │  │           │  │           │               │
-│  │- Network │  │- Rules    │  │- Metrics  │               │
-│  └──┬───────┘  └──────┬────┘  └──────┬────┘               │
-│     │                 │              │                      │
-│     └────────────┬────┴──────────────┘                      │
-│                  │                                           │
-│          ┌───────▼────────┐                                 │
-│          │   API Server   │                                 │
-│          │  :8080         │                                 │
-│          └────────────────┘                                 │
-│                  △                                           │
-│                  │                                           │
-│          ┌───────┴────────┐                                 │
-│          │  CLI Tool      │                                 │
-│          │ (hmon)         │                                 │
-│          │ cmd/hmon/main  │                                 │
-│          └────────────────┘                                 │
-│                                                               │
-│  External Integrations:                                      │
-│  - Hedera SDK (blockchain queries)                          │
-│  - Webhook endpoints (Slack, Discord, etc.)                │
-│                                                               │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph "Hedera Network Monitor"
+        subgraph "Monitor Service (cmd/monitor/main.go)"
+            Collectors[Collectors<br/>- Account<br/>- Network]
+            AlertMgr[Alert Manager<br/>- Rules<br/>- Webhooks]
+            Storage[Storage<br/>Memory MVP<br/>- Metrics]
+
+            Collectors --> Storage
+            Storage --> AlertMgr
+        end
+
+        API[API Server<br/>:8080]
+        Storage --> API
+        AlertMgr --> API
+
+        CLI[CLI Tool hmon<br/>cmd/hmon/main.go]
+        CLI -.-> API
+    end
+
+    Hedera[Hedera Network<br/>SDK Queries]
+    Webhooks[Webhooks<br/>Slack, Discord, etc.]
+
+    Collectors --> Hedera
+    AlertMgr --> Webhooks
+
+    style Collectors fill:#e1f5ff
+    style AlertMgr fill:#fff4e1
+    style Storage fill:#f0e1ff
+    style API fill:#e1ffe1
+    style CLI fill:#ffe1e1
 ```
 
 ### Component Overview
