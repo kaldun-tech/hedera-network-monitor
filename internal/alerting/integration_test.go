@@ -159,17 +159,27 @@ func TestEndToEndAlertDispatchMultipleRules(t *testing.T) {
 	// Start alert processor
 	_, _, errChan := startAlertProcessor(manager, 1*time.Second)
 
-	// Send metric values that trigger only greater than > and changed rules
+	// Send first metric - initializes state for "changed" rule
 	metric := types.Metric{
 		Name:  "test_metric",
-		Value: 150.0,
+		Value: 100.0, // Start with 100
 	}
 	err = manager.CheckMetric(metric)
 	if err != nil {
 		t.Fatalf("CheckMetric failed: %v", err)
 	}
 
-	// Wait for webhook to be called
+	// Wait briefly for processing
+	time.Sleep(50 * time.Millisecond)
+
+	// Send second metric - triggers both > and changed rules
+	metric.Value = 150.0 // Change to 150 (triggers "changed" and ">")
+	err = manager.CheckMetric(metric)
+	if err != nil {
+		t.Fatalf("CheckMetric failed: %v", err)
+	}
+
+	// Wait for webhooks to be called
 	time.Sleep(100 * time.Millisecond)
 
 	// Wait for Run() to return
