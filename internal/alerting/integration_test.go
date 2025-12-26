@@ -757,9 +757,6 @@ func TestEndToEndAlertQueueOverflow(t *testing.T) {
 // TestEndToEndStateTrackingWithWebhook tests state-tracking conditions (changed/increased/decreased)
 // work correctly and trigger webhooks appropriately
 func TestEndToEndStateTrackingWithWebhook(t *testing.T) {
-	// TODO: Fix state tracking initialization - "changed" condition triggers on first metric
-	// when it shouldn't. The state tracking logic needs to properly initialize with no previous value.
-	t.Skip("State tracking initialization issue - changed condition fires on first metric")
 
 	// Create mock server that captures webhook calls
 	server, webhookCalls := captureWebhookCalls(t)

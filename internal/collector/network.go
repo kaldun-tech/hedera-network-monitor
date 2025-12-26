@@ -2,7 +2,6 @@ package collector
 
 import (
 	"context"
-	"log"
 	"os"
 	"strconv"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/kaldun-tech/hedera-network-monitor/internal/storage"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
 	"github.com/kaldun-tech/hedera-network-monitor/pkg/hedera"
+	"github.com/kaldun-tech/hedera-network-monitor/pkg/logger"
 )
 
 // NetworkCollector collects network-wide metrics from the Hedera network
@@ -78,15 +78,17 @@ func (nc *NetworkCollector) Collect(ctx context.Context, store storage.Storage, 
 	ticker := time.NewTicker(nc.interval)
 	defer ticker.Stop()
 
-	log.Printf("[%s] Starting collection with interval %v", nc.Name(), nc.interval)
+	logger.Info("Starting network collector",
+		"component", nc.Name(),
+		"interval", nc.interval)
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("[%s] Stopping collector", nc.Name())
+			logger.Info("Stopping collector", "component", nc.Name())
 			return ctx.Err()
 		case <-ticker.C:
-			log.Printf("[%s] Collecting metrics", nc.Name())
+			logger.Debug("Collecting metrics", "component", nc.Name())
 
 			// Track if address book query was successful (for consensus status metric)
 			consensusValue := 0.0
@@ -113,10 +115,13 @@ func (nc *NetworkCollector) Collect(ctx context.Context, store storage.Storage, 
 				perNodeMetrics := buildPerNodeMetrics(addressBook.NodeAddresses, nc.Name())
 				allMetrics = append(allMetrics, perNodeMetrics...)
 
-				log.Printf("[%s] Completed metric collection from address book (%d nodes)",
-					nc.Name(), len(addressBook.NodeAddresses))
+				logger.Info("Completed metric collection from address book",
+					"component", nc.Name(),
+					"nodes", len(addressBook.NodeAddresses))
 			} else {
-				log.Printf("[%s] Skipped metric collection due to address book error: %v", nc.Name(), err)
+				logger.Error("Skipped metric collection due to address book error",
+					"component", nc.Name(),
+					"error", err)
 				// Network is down -> report 0 for consensus metric
 			}
 
@@ -131,10 +136,16 @@ func (nc *NetworkCollector) Collect(ctx context.Context, store storage.Storage, 
 			// Store and check all metrics
 			for _, metric := range allMetrics {
 				if err := store.StoreMetric(metric); err != nil {
-					log.Printf("[%s] Error storing metric %s: %v", nc.Name(), metric.Name, err)
+					logger.Error("Error storing metric",
+						"component", nc.Name(),
+						"metric_name", metric.Name,
+						"error", err)
 				}
 				if err := alertMgr.CheckMetric(metric); err != nil {
-					log.Printf("[%s] Error checking alerts for %s: %v", nc.Name(), metric.Name, err)
+					logger.Error("Error checking alerts",
+						"component", nc.Name(),
+						"metric_name", metric.Name,
+						"error", err)
 				}
 			}
 		}

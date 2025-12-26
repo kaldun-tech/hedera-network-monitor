@@ -2,13 +2,13 @@ package storage
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
+	"github.com/kaldun-tech/hedera-network-monitor/pkg/logger"
 )
 
 // MemoryStorage is an in-memory implementation of Storage
@@ -36,7 +36,10 @@ func parseMaxSize(s string) (maxSize int) {
 
 	maxSize, err := strconv.Atoi(fields[0])
 	if err != nil {
-		log.Printf("Invalid interval format: %q, using default", s)
+		logger.Warn("Invalid max size format, using default",
+			"component", "MemoryStorage",
+			"format", s,
+			"default", DefaultMaxSize)
 		return DefaultMaxSize
 	}
 	return maxSize

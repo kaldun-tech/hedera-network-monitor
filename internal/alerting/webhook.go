@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"net/http"
 	"time"
+
+	"github.com/kaldun-tech/hedera-network-monitor/pkg/logger"
 )
 
 // WebhookPayload represents the JSON payload sent to webhooks
@@ -68,8 +69,12 @@ func SendWebhookRequest(webhookURL string, payload WebhookPayload, config Webhoo
 			lastErr = err
 			if attempt < config.MaxRetries {
 				backoff := calculateBackoff(attempt, config.InitialBackoff, config.MaxBackoff)
-				log.Printf("[AlertManager] Webhook request failed (attempt %d/%d): %v. Retrying in %v",
-					attempt+1, config.MaxRetries+1, err, backoff)
+				logger.Warn("Webhook request failed, retrying",
+					"component", "AlertManager",
+					"attempt", attempt+1,
+					"max_attempts", config.MaxRetries+1,
+					"backoff", backoff,
+					"error", err)
 				time.Sleep(backoff)
 				continue
 			}
@@ -80,7 +85,10 @@ func SendWebhookRequest(webhookURL string, payload WebhookPayload, config Webhoo
 		if 200 <= resp.StatusCode && resp.StatusCode < 300 {
 			// Read and discard response body to close connection
 			_, _ = io.ReadAll(resp.Body)
-			log.Printf("[AlertManager] Webhook sent successfully to %s (status: %d)", webhookURL, resp.StatusCode)
+			logger.Info("Webhook sent successfully",
+				"component", "AlertManager",
+				"webhook_url", webhookURL,
+				"status_code", resp.StatusCode)
 			_ = resp.Body.Close()
 			return nil
 		}
@@ -95,8 +103,12 @@ func SendWebhookRequest(webhookURL string, payload WebhookPayload, config Webhoo
 		if attempt < config.MaxRetries {
 			// Retry on non-2xx responses
 			backoff := calculateBackoff(attempt, config.InitialBackoff, config.MaxBackoff)
-			log.Printf("[AlertManager] Webhook returned %d (attempt %d/%d). Retrying in %v",
-				resp.StatusCode, attempt+1, config.MaxRetries+1, backoff)
+			logger.Warn("Webhook returned non-success status, retrying",
+				"component", "AlertManager",
+				"status_code", resp.StatusCode,
+				"attempt", attempt+1,
+				"max_attempts", config.MaxRetries+1,
+				"backoff", backoff)
 			time.Sleep(backoff)
 			continue
 		}

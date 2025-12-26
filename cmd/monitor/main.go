@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,6 +12,7 @@ import (
 	"github.com/kaldun-tech/hedera-network-monitor/internal/storage"
 	"github.com/kaldun-tech/hedera-network-monitor/pkg/config"
 	"github.com/kaldun-tech/hedera-network-monitor/pkg/hedera"
+	"github.com/kaldun-tech/hedera-network-monitor/pkg/logger"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -20,8 +20,23 @@ func main() {
 	// Load configuration
 	cfg, err := config.Load("config/config.yaml")
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		// Use default logger before config is loaded
+		logger.Error("Failed to load configuration", "error", err)
+		os.Exit(1)
 	}
+
+	// Initialize logger based on configuration
+	logLevel := logger.ParseLevel(cfg.Logging.Level)
+	if cfg.Logging.Format == "json" {
+		logger.InitJSON(logLevel, os.Stdout)
+	} else {
+		logger.Init(logLevel, os.Stdout)
+	}
+
+	logger.Info("Starting Hedera Network Monitor",
+		"network", cfg.Network.Name,
+		"log_level", cfg.Logging.Level,
+		"log_format", cfg.Logging.Format)
 
 	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
@@ -34,7 +49,8 @@ func main() {
 	// Initialize components
 	hederaClient, err := hedera.NewClient(cfg.Network.Name, cfg.Network.OperatorID, cfg.Network.OperatorKey)
 	if err != nil {
-		log.Fatalf("Failed to create Hedera client: %v", err)
+		logger.Error("Failed to create Hedera client", "error", err)
+		os.Exit(1)
 	}
 	store := storage.NewMemoryStorage()
 	alertManager := alerting.NewManager(cfg.Alerting)
@@ -53,7 +69,7 @@ func main() {
 
 	// Start API server
 	eg.Go(func() error {
-		log.Printf("Starting API server on port %d", cfg.API.Port)
+		logger.Info("Starting API server", "port", cfg.API.Port)
 		return server.Start(egCtx)
 	})
 
@@ -62,29 +78,29 @@ func main() {
 		// Capture collector in local variable to avoid closure issue
 		coll := c
 		eg.Go(func() error {
-			log.Printf("Starting collector: %s", coll.Name())
+			logger.Info("Starting collector", "name", coll.Name())
 			return coll.Collect(egCtx, store, alertManager)
 		})
 	}
 
 	// Start alert manager
 	eg.Go(func() error {
-		log.Println("Starting alert manager")
+		logger.Info("Starting alert manager")
 		return alertManager.Run(egCtx)
 	})
 
 	// Wait for shutdown signal in a separate goroutine
 	go func() {
 		sig := <-sigChan
-		log.Printf("Received signal: %v. Initiating graceful shutdown...", sig)
+		logger.Info("Received signal, initiating graceful shutdown", "signal", sig)
 		cancel()
 	}()
 
 	// Wait for all services to complete or error
 	if err := eg.Wait(); err != nil {
-		log.Printf("Service error: %v", err)
+		logger.Error("Service error", "error", err)
 		os.Exit(1)
 	}
 
-	log.Println("Service shut down successfully")
+	logger.Info("Service shut down successfully")
 }

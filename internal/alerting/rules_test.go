@@ -14,17 +14,17 @@ func TestEvaluateCondition_GreaterThan(t *testing.T) {
 	}
 
 	// Test: 150 > 100 (true)
-	if !rule.EvaluateCondition(150.0, 0) {
+	if !rule.EvaluateCondition(150.0, 0, false) {
 		t.Error("expected > condition to be true for 150 > 100")
 	}
 
 	// Test: 100 > 100 (false)
-	if rule.EvaluateCondition(100.0, 0) {
+	if rule.EvaluateCondition(100.0, 0, false) {
 		t.Error("expected > condition to be false for 100 > 100")
 	}
 
 	// Test: 50 > 100 (false)
-	if rule.EvaluateCondition(50.0, 0) {
+	if rule.EvaluateCondition(50.0, 0, false) {
 		t.Error("expected > condition to be false for 50 > 100")
 	}
 }
@@ -39,17 +39,17 @@ func TestEvaluateCondition_LessThan(t *testing.T) {
 	}
 
 	// Test: 50 < 100 (true)
-	if !rule.EvaluateCondition(50.0, 0) {
+	if !rule.EvaluateCondition(50.0, 0, false) {
 		t.Error("expected < condition to be true for 50 < 100")
 	}
 
 	// Test: 100 < 100 (false)
-	if rule.EvaluateCondition(100.0, 0) {
+	if rule.EvaluateCondition(100.0, 0, false) {
 		t.Error("expected < condition to be false for 100 < 100")
 	}
 
 	// Test: 150 < 100 (false)
-	if rule.EvaluateCondition(150.0, 0) {
+	if rule.EvaluateCondition(150.0, 0, false) {
 		t.Error("expected < condition to be false for 150 < 100")
 	}
 }
@@ -64,17 +64,17 @@ func TestEvaluateCondition_GreaterThanOrEqual(t *testing.T) {
 	}
 
 	// Test: 150 >= 100 (true)
-	if !rule.EvaluateCondition(150.0, 0) {
+	if !rule.EvaluateCondition(150.0, 0, false) {
 		t.Error("expected >= condition to be true for 150 >= 100")
 	}
 
 	// Test: 100 >= 100 (true) - This is the key difference from >
-	if !rule.EvaluateCondition(100.0, 0) {
+	if !rule.EvaluateCondition(100.0, 0, false) {
 		t.Error("expected >= condition to be true for 100 >= 100")
 	}
 
 	// Test: 50 >= 100 (false)
-	if rule.EvaluateCondition(50.0, 0) {
+	if rule.EvaluateCondition(50.0, 0, false) {
 		t.Error("expected >= condition to be false for 50 >= 100")
 	}
 }
@@ -89,17 +89,17 @@ func TestEvaluateCondition_LessThanOrEqual(t *testing.T) {
 	}
 
 	// Test: 50 <= 100 (true)
-	if !rule.EvaluateCondition(50.0, 0) {
+	if !rule.EvaluateCondition(50.0, 0, false) {
 		t.Error("expected <= condition to be true for 50 <= 100")
 	}
 
 	// Test: 100 <= 100 (true) - This is the key difference from <
-	if !rule.EvaluateCondition(100.0, 0) {
+	if !rule.EvaluateCondition(100.0, 0, false) {
 		t.Error("expected <= condition to be true for 100 <= 100")
 	}
 
 	// Test: 150 <= 100 (false)
-	if rule.EvaluateCondition(150.0, 0) {
+	if rule.EvaluateCondition(150.0, 0, false) {
 		t.Error("expected <= condition to be false for 150 <= 100")
 	}
 }
@@ -114,12 +114,12 @@ func TestEvaluateCondition_Equal(t *testing.T) {
 	}
 
 	// Test: 100 == 100 (true)
-	if !rule.EvaluateCondition(100.0, 0) {
+	if !rule.EvaluateCondition(100.0, 0, false) {
 		t.Error("expected == condition to be true for 100 == 100")
 	}
 
 	// Test: 150 == 100 (false)
-	if rule.EvaluateCondition(150.0, 0) {
+	if rule.EvaluateCondition(150.0, 0, false) {
 		t.Error("expected == condition to be false for 150 == 100")
 	}
 }
@@ -134,12 +134,12 @@ func TestEvaluateCondition_NotEqual(t *testing.T) {
 	}
 
 	// Test: 150 != 100 (true)
-	if !rule.EvaluateCondition(150.0, 0) {
+	if !rule.EvaluateCondition(150.0, 0, false) {
 		t.Error("expected != condition to be true for 150 != 100")
 	}
 
 	// Test: 100 != 100 (false)
-	if rule.EvaluateCondition(100.0, 0) {
+	if rule.EvaluateCondition(100.0, 0, false) {
 		t.Error("expected != condition to be false for 100 != 100")
 	}
 }
@@ -152,19 +152,24 @@ func TestEvaluateCondition_Changed(t *testing.T) {
 		Condition: "changed",
 	}
 
-	// Test 1: Value changed (100 -> 150)
-	if !rule.EvaluateCondition(150.0, 100.0) {
+	// Test 1: Value changed (100 -> 150) with previous value
+	if !rule.EvaluateCondition(150.0, 100.0, true) {
 		t.Error("expected changed condition to be true when value differs")
 	}
 
 	// Test 2: Value unchanged (100 -> 100)
-	if rule.EvaluateCondition(100.0, 100.0) {
+	if rule.EvaluateCondition(100.0, 100.0, true) {
 		t.Error("expected changed condition to be false when value is same")
 	}
 
 	// Test 3: Value changed back (150 -> 100)
-	if !rule.EvaluateCondition(100.0, 150.0) {
+	if !rule.EvaluateCondition(100.0, 150.0, true) {
 		t.Error("expected changed condition to be true when value changes back")
+	}
+
+	// Test 4: First metric (no previous value) should NOT trigger
+	if rule.EvaluateCondition(100.0, 0.0, false) {
+		t.Error("expected changed condition to be false for first metric (no previous value)")
 	}
 }
 
@@ -177,23 +182,28 @@ func TestEvaluateCondition_Increased(t *testing.T) {
 	}
 
 	// Test 1: Value increased (100 -> 150)
-	if !rule.EvaluateCondition(150.0, 100.0) {
+	if !rule.EvaluateCondition(150.0, 100.0, true) {
 		t.Error("expected increased condition to be true when value goes up")
 	}
 
 	// Test 2: Value decreased (150 -> 100)
-	if rule.EvaluateCondition(100.0, 150.0) {
+	if rule.EvaluateCondition(100.0, 150.0, true) {
 		t.Error("expected increased condition to be false when value goes down")
 	}
 
 	// Test 3: Value unchanged (100 -> 100)
-	if rule.EvaluateCondition(100.0, 100.0) {
+	if rule.EvaluateCondition(100.0, 100.0, true) {
 		t.Error("expected increased condition to be false when value is same")
 	}
 
 	// Test 4: Increase from zero (0 -> 50)
-	if !rule.EvaluateCondition(50.0, 0.0) {
+	if !rule.EvaluateCondition(50.0, 0.0, true) {
 		t.Error("expected increased condition to be true when increasing from zero")
+	}
+
+	// Test 5: First metric (no previous value) should NOT trigger
+	if rule.EvaluateCondition(100.0, 0.0, false) {
+		t.Error("expected increased condition to be false for first metric (no previous value)")
 	}
 }
 
@@ -206,22 +216,27 @@ func TestEvaluateCondition_Decreased(t *testing.T) {
 	}
 
 	// Test 1: Value decreased (150 -> 100)
-	if !rule.EvaluateCondition(100.0, 150.0) {
+	if !rule.EvaluateCondition(100.0, 150.0, true) {
 		t.Error("expected decreased condition to be true when value goes down")
 	}
 
 	// Test 2: Value increased (100 -> 150)
-	if rule.EvaluateCondition(150.0, 100.0) {
+	if rule.EvaluateCondition(150.0, 100.0, true) {
 		t.Error("expected decreased condition to be false when value goes up")
 	}
 
 	// Test 3: Value unchanged (100 -> 100)
-	if rule.EvaluateCondition(100.0, 100.0) {
+	if rule.EvaluateCondition(100.0, 100.0, true) {
 		t.Error("expected decreased condition to be false when value is same")
 	}
 
 	// Test 4: Decrease to zero (50 -> 0)
-	if !rule.EvaluateCondition(0.0, 50.0) {
+	if !rule.EvaluateCondition(0.0, 50.0, true) {
 		t.Error("expected decreased condition to be true when decreasing to zero")
+	}
+
+	// Test 5: First metric (no previous value) should NOT trigger
+	if rule.EvaluateCondition(100.0, 0.0, false) {
+		t.Error("expected decreased condition to be false for first metric (no previous value)")
 	}
 }

@@ -26,7 +26,9 @@ type AlertEvent struct {
 }
 
 // EvaluateCondition checks if a metric value satisfies the rule condition
-func (r *AlertRule) EvaluateCondition(metricValue float64, previousValue float64) bool {
+// For state-tracking conditions (changed/increased/decreased), hasPreviousValue
+// must be true or the condition will return false (first metric doesn't trigger)
+func (r *AlertRule) EvaluateCondition(metricValue float64, previousValue float64, hasPreviousValue bool) bool {
 	switch r.Condition {
 	case ">":
 		return metricValue > r.Threshold
@@ -41,11 +43,14 @@ func (r *AlertRule) EvaluateCondition(metricValue float64, previousValue float64
 	case "!=":
 		return metricValue != r.Threshold
 	case "changed":
-		return metricValue != previousValue
+		// Don't trigger on first metric (no previous value to compare)
+		return hasPreviousValue && metricValue != previousValue
 	case "increased":
-		return previousValue < metricValue
+		// Don't trigger on first metric
+		return hasPreviousValue && previousValue < metricValue
 	case "decreased":
-		return metricValue < previousValue
+		// Don't trigger on first metric
+		return hasPreviousValue && metricValue < previousValue
 	default:
 		return false
 	}

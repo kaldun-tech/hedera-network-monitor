@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/kaldun-tech/hedera-network-monitor/internal/alerting"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/storage"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
+	"github.com/kaldun-tech/hedera-network-monitor/pkg/logger"
 )
 
 // Response types for standardized API responses
@@ -107,7 +107,9 @@ func (s *Server) writeJSON(w http.ResponseWriter, code int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.Printf("Error encoding JSON response: %v", err)
+		logger.Error("Error encoding JSON response",
+			"component", "APIServer",
+			"error", err)
 	}
 }
 
@@ -138,9 +140,13 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("HTTP API server listening on %s", s.server.Addr)
+		logger.Info("HTTP API server listening",
+			"component", "APIServer",
+			"address", s.server.Addr)
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("API server error: %v", err)
+			logger.Error("API server error",
+				"component", "APIServer",
+				"error", err)
 		}
 	}()
 
@@ -151,7 +157,7 @@ func (s *Server) Start(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	log.Println("Shutting down API server")
+	logger.Info("Shutting down API server", "component", "APIServer")
 	return s.server.Shutdown(shutdownCtx)
 }
 
@@ -197,17 +203,23 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	// Parse limit as integer
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit < 0 {
-		log.Printf("Invalid limit, using default %d", DefaultLimit)
+		logger.Debug("Invalid limit, using default",
+			"component", "APIServer",
+			"default_limit", DefaultLimit)
 		limit = DefaultLimit
 	} else if MaxLimit < limit {
-		log.Printf("Limit too high, using max %d", MaxLimit)
+		logger.Debug("Limit too high, using max",
+			"component", "APIServer",
+			"max_limit", MaxLimit)
 		limit = MaxLimit
 	}
 
 	// Query storage
 	metrics, err := s.store.GetMetrics(name, limit)
 	if err != nil {
-		log.Printf("Error retrieving metrics: %v", err)
+		logger.Error("Error retrieving metrics",
+			"component", "APIServer",
+			"error", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to retrieve metrics")
 		return
 	}
@@ -251,7 +263,11 @@ func (s *Server) handleMetricsByLabel(w http.ResponseWriter, r *http.Request) {
 	// Query storage
 	metrics, err := s.store.GetMetricsByLabel(key, value)
 	if err != nil {
-		log.Printf("Error retrieving metrics by label: %v", err)
+		logger.Error("Error retrieving metrics by label",
+			"component", "APIServer",
+			"key", key,
+			"value", value,
+			"error", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to retrieve metrics")
 		return
 	}
@@ -293,7 +309,9 @@ func (s *Server) handleStorageStats(w http.ResponseWriter, r *http.Request) {
 	// Get stats from storage
 	stats, err := statsProvider.Stats()
 	if err != nil {
-		log.Printf("Error retrieving storage stats: %v", err)
+		logger.Error("Error retrieving storage stats",
+			"component", "APIServer",
+			"error", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to retrieve stats")
 		return
 	}
@@ -335,7 +353,7 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 // Returns: AlertListResponse with all alert rules
 func (s *Server) handleListAlerts(w http.ResponseWriter, r *http.Request) {
 	// Get all rules from alertManager using GetRules()
-	log.Printf("[API] GET /api/v1/alerts")
+	logger.Debug("GET /api/v1/alerts", "component", "APIServer")
 	allRules := s.alertManager.GetRules()
 
 	// Convert alerting.AlertRule to AlertRuleResponse
@@ -417,7 +435,7 @@ func (r *CreateAlertRequest) Validate() error {
 // Request body: CreateAlertRequest
 // Returns: AlertRuleResponse with created rule
 func (s *Server) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[API] POST /api/v1/alerts")
+	logger.Debug("POST /api/v1/alerts", "component", "APIServer")
 	// Parse JSON body into CreateAlertRequest
 	createRequest := CreateAlertRequest{}
 	err := json.NewDecoder(r.Body).Decode(&createRequest)
@@ -475,7 +493,7 @@ func (s *Server) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
 // Query parameter: id - the alert rule ID to delete
 // Returns: 204 No Content on success
 func (s *Server) handleDeleteAlert(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[API] DELETE /api/v1/alerts")
+	logger.Debug("DELETE /api/v1/alerts", "component", "APIServer")
 	// Extract rule ID from URL query parameter
 	ruleID := r.URL.Query().Get("id")
 

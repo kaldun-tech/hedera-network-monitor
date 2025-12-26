@@ -3,27 +3,28 @@ package alerting
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
 	"github.com/kaldun-tech/hedera-network-monitor/pkg/config"
+	"github.com/kaldun-tech/hedera-network-monitor/pkg/logger"
 )
 
 // Manager handles alert rules and sending notifications
 type Manager struct {
-	rules           []AlertRule
-	webhooks        []string // Webhook URLs for notifications
-	alertQueue      chan AlertEvent
-	ruleMutex       sync.RWMutex
-	lastAlerts      map[string]time.Time // Track when we last alerted on each rule to avoid spam
-	lastMetrics     map[string]float64   // Maps rule ID to previously observed metric value
-	metricMutex     sync.Mutex
-	alertMutex      sync.Mutex
-	webhookConfig   WebhookConfig
-	defaultCooldown int
+	rules                  []AlertRule
+	webhooks               []string // Webhook URLs for notifications
+	alertQueue             chan AlertEvent
+	ruleMutex              sync.RWMutex
+	lastAlerts             map[string]time.Time // Track when we last alerted on each rule to avoid spam
+	lastMetrics            map[string]float64   // Maps rule ID to previously observed metric value
+	lastMetricsInitialized map[string]bool      // Tracks whether we've seen a metric for each rule
+	metricMutex            sync.Mutex
+	alertMutex             sync.Mutex
+	webhookConfig          WebhookConfig
+	defaultCooldown        int
 }
 
 // NewManager creates a new alert manager
@@ -49,13 +50,14 @@ func NewManager(config config.AlertingConfig) *Manager {
 	}
 
 	return &Manager{
-		rules:           rules,
-		webhooks:        config.Webhooks,
-		alertQueue:      make(chan AlertEvent, config.QueueBufferSize),
-		lastAlerts:      make(map[string]time.Time),
-		lastMetrics:     make(map[string]float64),
-		webhookConfig:   DefaultWebhookConfig(),
-		defaultCooldown: config.CooldownSeconds,
+		rules:                  rules,
+		webhooks:               config.Webhooks,
+		alertQueue:             make(chan AlertEvent, config.QueueBufferSize),
+		lastAlerts:             make(map[string]time.Time),
+		lastMetrics:            make(map[string]float64),
+		lastMetricsInitialized: make(map[string]bool),
+		webhookConfig:          DefaultWebhookConfig(),
+		defaultCooldown:        config.CooldownSeconds,
 	}
 }
 
@@ -125,7 +127,9 @@ func (m *Manager) queueAlert(rule AlertRule, metric types.Metric) {
 		m.lastAlerts[rule.ID] = time.Now()
 		m.alertMutex.Unlock()
 	default:
-		log.Printf("[AlertManager] Alert queue full, dropping alert for rule %s", rule.ID)
+		logger.Warn("Alert queue full, dropping alert",
+			"component", "AlertManager",
+			"rule_id", rule.ID)
 	}
 }
 
@@ -146,14 +150,19 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 			continue
 		}
 
-		log.Printf("[AlertManager] Evaluating metric against rule: %s", rule.ID)
+		logger.Debug("Evaluating metric against rule",
+			"component", "AlertManager",
+			"rule_id", rule.ID,
+			"metric_name", metric.Name,
+			"metric_value", metric.Value)
 
 		// Extract and compare to actual metric value
 		m.metricMutex.Lock()
 		previousValue := m.lastMetrics[rule.ID]
+		hasPreviousValue := m.lastMetricsInitialized[rule.ID]
 		m.metricMutex.Unlock()
 
-		shouldAlert := rule.EvaluateCondition(metric.Value, previousValue)
+		shouldAlert := rule.EvaluateCondition(metric.Value, previousValue, hasPreviousValue)
 
 		if shouldAlert {
 			// Check if we recently alerted on this rule to avoid spam
@@ -167,16 +176,20 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 			}
 			cooldown := time.Duration(cooldownSeconds) * time.Second
 			if exists && time.Since(lastAlert) < cooldown {
-				log.Printf("[AlertManager] Skipping alert for rule %s (cooldown period)", rule.ID)
+				logger.Debug("Skipping alert (cooldown period)",
+					"component", "AlertManager",
+					"rule_id", rule.ID,
+					"cooldown_remaining", (cooldown - time.Since(lastAlert)).String())
 				continue
 			}
 
 			m.queueAlert(rule, metric)
 		}
 
-		// Update previousValue
+		// Update previousValue and mark as initialized
 		m.metricMutex.Lock()
 		m.lastMetrics[rule.ID] = metric.Value
+		m.lastMetricsInitialized[rule.ID] = true
 		m.metricMutex.Unlock()
 	}
 
@@ -186,16 +199,20 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 // Run starts the alert manager's main loop
 // It processes queued alerts and sends notifications via webhooks
 func (m *Manager) Run(ctx context.Context) error {
-	log.Println("[AlertManager] Starting alert processor")
+	logger.Info("Starting alert processor", "component", "AlertManager")
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[AlertManager] Stopping alert processor")
+			logger.Info("Stopping alert processor", "component", "AlertManager")
 			return ctx.Err()
 		case alert := <-m.alertQueue:
-			log.Printf("[AlertManager] Alert triggered: %s (severity: %s, value: %.2f)",
-				alert.RuleName, alert.Severity, alert.Value)
+			logger.Info("Alert triggered",
+				"component", "AlertManager",
+				"rule_name", alert.RuleName,
+				"severity", alert.Severity,
+				"value", alert.Value,
+				"metric_id", alert.MetricID)
 
 			// Send to webhooks in parallel using goroutines
 			for _, webhook := range m.webhooks {
@@ -220,7 +237,10 @@ func (m *Manager) sendWebhook(webhookURL string, alert AlertEvent) {
 
 	err := SendWebhookRequest(webhookURL, payload, m.webhookConfig)
 	if err != nil {
-		log.Printf("[AlertManager] Failed to send webhook to %s for alert %s: %v",
-			webhookURL, alert.RuleID, err)
+		logger.Error("Failed to send webhook",
+			"component", "AlertManager",
+			"webhook_url", webhookURL,
+			"rule_id", alert.RuleID,
+			"error", err)
 	}
 }

@@ -26,7 +26,8 @@
       "Bash(timeout 60 go test:*)",
       "Bash(make test-unit:*)",
       "Bash(make build:*)",
-      "Bash(time go test:*)"
+      "Bash(time go test:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

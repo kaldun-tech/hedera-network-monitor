@@ -2,10 +2,10 @@ package hedera
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
+	"github.com/kaldun-tech/hedera-network-monitor/pkg/logger"
 )
 
 // TinybarPerHbar is the conversion constant: 1 HBAR = 100,000,000 tinybar
@@ -53,7 +53,7 @@ type HederaClient struct {
 // NewClient creates a new Hedera SDK client wrapper
 // operatorID and operatorKey can come from config file or environment variables
 func NewClient(network, operatorID, operatorKey string) (Client, error) {
-	log.Printf("Creating Hedera client for network: %s", network)
+	logger.Info("Creating Hedera client", "network", network)
 	client, err := hiero.ClientForName(network)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
@@ -99,7 +99,7 @@ func getTransactionID(transactionID string) (hiero.TransactionID, error) {
 
 // GetAccountBalance implements Client interface
 func (hc *HederaClient) GetAccountBalance(accountID string) (int64, error) {
-	log.Printf("Querying balance for account: %s", accountID)
+	logger.Debug("Querying balance", "account_id", accountID)
 	parsedAccount, err := getAccount(accountID)
 	if err != nil {
 		return 0, fmt.Errorf("invalid accountID: %w", err)
@@ -118,7 +118,7 @@ func (hc *HederaClient) GetAccountBalance(accountID string) (int64, error) {
 
 // GetAccountInfo implements Client interface
 func (hc *HederaClient) GetAccountInfo(accountID string) (*hiero.AccountInfo, error) {
-	log.Printf("Querying account info for: %s", accountID)
+	logger.Debug("Querying account info", "account_id", accountID)
 	parsedAccount, err := getAccount(accountID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid accountID: %w", err)
@@ -156,7 +156,7 @@ func buildRecordStruct(nextRec hiero.TransactionRecord) Record {
 // GetAccountRecords implements Client interface
 func (hc *HederaClient) GetAccountRecords(accountID string, limit int) ([]Record, error) {
 	// Parse accountID
-	log.Printf("Querying account records for: %s (limit: %d)", accountID, limit)
+	logger.Debug("Querying account records", "account_id", accountID, "limit", limit)
 	parsedAccount, err := getAccount(accountID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid accountID: %w", err)
@@ -184,7 +184,7 @@ func (hc *HederaClient) GetAccountRecords(accountID string, limit int) ([]Record
 
 // GetTransactionReceipt implements Client interface
 func (hc *HederaClient) GetTransactionReceipt(transactionID string) (*hiero.TransactionReceipt, error) {
-	log.Printf("Querying transaction receipt for: %s", transactionID)
+	logger.Debug("Querying transaction receipt", "transaction_id", transactionID)
 	// Parse transactionID, execute query
 	tID, err := getTransactionID(transactionID)
 	if err != nil {
@@ -202,7 +202,7 @@ func (hc *HederaClient) GetTransactionReceipt(transactionID string) (*hiero.Tran
 
 // GetAccountExpiry implements Client interface
 func (hc *HederaClient) GetAccountExpiry(accountID string) (int64, error) {
-	log.Printf("Querying account expiry for: %s", accountID)
+	logger.Debug("Querying account expiry", "account_id", accountID)
 	info, err := hc.GetAccountInfo(accountID)
 	if err != nil {
 		return 0, fmt.Errorf("error retrieving account info: %w", err)
@@ -212,7 +212,7 @@ func (hc *HederaClient) GetAccountExpiry(accountID string) (int64, error) {
 
 // GetNodeAddressBook implements Client interface
 func (hc *HederaClient) GetNodeAddressBook() (*hiero.NodeAddressBook, error) {
-	log.Println("Querying node address book")
+	logger.Debug("Querying node address book")
 	// Address book is stored in file 0.0.102 on all Hedera networks
 	addressBookFileID, _ := hiero.FileIDFromString("0.0.102")
 	query := hiero.NewAddressBookQuery().

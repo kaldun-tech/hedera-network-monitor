@@ -2,7 +2,6 @@ package collector
 
 import (
 	"context"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/kaldun-tech/hedera-network-monitor/internal/storage"
 	"github.com/kaldun-tech/hedera-network-monitor/internal/types"
 	"github.com/kaldun-tech/hedera-network-monitor/pkg/hedera"
+	"github.com/kaldun-tech/hedera-network-monitor/pkg/logger"
 )
 
 // AccountConfig represents configuration for account monitoring
@@ -45,12 +45,16 @@ func ParseInterval(s string) time.Duration {
 
 	seconds, err := strconv.Atoi(fields[0])
 	if err != nil {
-		log.Printf("Invalid interval format: %q, using default", s)
+		logger.Warn("Invalid interval format, using default",
+			"component", "AccountCollector",
+			"format", s)
 		return DefaultInterval
 	}
 
 	if seconds <= 0 {
-		log.Printf("Interval must be positive, got %d, using default", seconds)
+		logger.Warn("Interval must be positive, using default",
+			"component", "AccountCollector",
+			"interval", seconds)
 		return DefaultInterval
 	}
 
@@ -100,12 +104,15 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 	ticker := time.NewTicker(ac.interval)
 	defer ticker.Stop()
 
-	log.Printf("[%s] Starting collection with interval %v", ac.Name(), ac.interval)
+	logger.Info("Starting account collector",
+		"component", ac.Name(),
+		"interval", ac.interval,
+		"accounts", len(ac.accounts))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("[%s] Stopping collector", ac.Name())
+			logger.Info("Stopping collector", "component", ac.Name())
 			return ctx.Err()
 		case <-ticker.C:
 			// Collect metrics for each account
@@ -115,7 +122,10 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 				// 1. Query account balance
 				balance, err := ac.client.GetAccountBalance(accountCfg.ID)
 				if err != nil {
-					log.Printf("[%s] Error getting balance: %v", ac.Name(), err)
+					logger.Error("Error getting balance",
+						"component", ac.Name(),
+						"account_id", accountCfg.ID,
+						"error", err)
 					return err
 				}
 
@@ -132,7 +142,10 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 				// 2. Query recent transactions (limit to 50 records per query)
 				accountRecords, err := ac.client.GetAccountRecords(accountCfg.ID, 50)
 				if err != nil {
-					log.Printf("[%s] Error getting account records: %v", ac.Name(), err)
+					logger.Error("Error getting account records",
+						"component", ac.Name(),
+						"account_id", accountCfg.ID,
+						"error", err)
 					// Continue to next account on error instead of failing entire collection
 					continue
 				}
@@ -173,10 +186,16 @@ func (ac *AccountCollector) Collect(ctx context.Context, store storage.Storage, 
 				// Store and check all metrics
 				for _, metric := range allMetrics {
 					if err := store.StoreMetric(metric); err != nil {
-						log.Printf("[%s] Error storing metric %s: %v", ac.Name(), metric.Name, err)
+						logger.Error("Error storing metric",
+							"component", ac.Name(),
+							"metric_name", metric.Name,
+							"error", err)
 					}
 					if err := alertMgr.CheckMetric(metric); err != nil {
-						log.Printf("[%s] Error checking alerts for %s: %v", ac.Name(), metric.Name, err)
+						logger.Error("Error checking alerts",
+							"component", ac.Name(),
+							"metric_name", metric.Name,
+							"error", err)
 					}
 				}
 

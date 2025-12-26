@@ -2,9 +2,9 @@ package config
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/kaldun-tech/hedera-network-monitor/internal/collector"
+	"github.com/kaldun-tech/hedera-network-monitor/pkg/logger"
 	"github.com/spf13/viper"
 )
 
@@ -73,7 +73,9 @@ func Load(configFile string) (*Config, error) {
 
 	// Read configuration file
 	if err := viper.ReadInConfig(); err != nil {
-		log.Printf("Warning: Could not read config file %s: %v", configFile, err)
+		logger.Warn("Could not read config file, using defaults",
+			"config_file", configFile,
+			"error", err)
 		// Return default config if file doesn't exist
 		return getDefaultConfig(), nil
 	}
@@ -89,7 +91,7 @@ func Load(configFile string) (*Config, error) {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	log.Printf("Configuration loaded from: %s", viper.ConfigFileUsed())
+	logger.Info("Configuration loaded", "file", viper.ConfigFileUsed())
 	return &config, nil
 }
 
