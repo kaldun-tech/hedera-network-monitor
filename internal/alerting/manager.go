@@ -12,19 +12,24 @@ import (
 	"github.com/kaldun-tech/hedera-network-monitor/pkg/logger"
 )
 
+// MetricState tracks the state of a metric for alert evaluation
+type MetricState struct {
+	Value       float64
+	Initialized bool
+}
+
 // Manager handles alert rules and sending notifications
 type Manager struct {
-	rules                  []AlertRule
-	webhooks               []string // Webhook URLs for notifications
-	alertQueue             chan AlertEvent
-	ruleMutex              sync.RWMutex
-	lastAlerts             map[string]time.Time // Track when we last alerted on each rule to avoid spam
-	lastMetrics            map[string]float64   // Maps rule ID to previously observed metric value
-	lastMetricsInitialized map[string]bool      // Tracks whether we've seen a metric for each rule
-	metricMutex            sync.Mutex
-	alertMutex             sync.Mutex
-	webhookConfig          WebhookConfig
-	defaultCooldown        int
+	rules           []AlertRule
+	webhooks        []string // Webhook URLs for notifications
+	alertQueue      chan AlertEvent
+	ruleMutex       sync.RWMutex
+	lastAlerts      map[string]time.Time   // Track when we last alerted on each rule to avoid spam
+	lastMetrics     map[string]MetricState // Maps rule ID to previously observed metric state
+	metricMutex     sync.Mutex
+	alertMutex      sync.Mutex
+	webhookConfig   WebhookConfig
+	defaultCooldown int
 }
 
 // NewManager creates a new alert manager
@@ -50,14 +55,13 @@ func NewManager(config config.AlertingConfig) *Manager {
 	}
 
 	return &Manager{
-		rules:                  rules,
-		webhooks:               config.Webhooks,
-		alertQueue:             make(chan AlertEvent, config.QueueBufferSize),
-		lastAlerts:             make(map[string]time.Time),
-		lastMetrics:            make(map[string]float64),
-		lastMetricsInitialized: make(map[string]bool),
-		webhookConfig:          DefaultWebhookConfig(),
-		defaultCooldown:        config.CooldownSeconds,
+		rules:           rules,
+		webhooks:        config.Webhooks,
+		alertQueue:      make(chan AlertEvent, config.QueueBufferSize),
+		lastAlerts:      make(map[string]time.Time),
+		lastMetrics:     make(map[string]MetricState),
+		webhookConfig:   DefaultWebhookConfig(),
+		defaultCooldown: config.CooldownSeconds,
 	}
 }
 
@@ -158,11 +162,10 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 
 		// Extract and compare to actual metric value
 		m.metricMutex.Lock()
-		previousValue := m.lastMetrics[rule.ID]
-		hasPreviousValue := m.lastMetricsInitialized[rule.ID]
+		state := m.lastMetrics[rule.ID]
 		m.metricMutex.Unlock()
 
-		shouldAlert := rule.EvaluateCondition(metric.Value, previousValue, hasPreviousValue)
+		shouldAlert := rule.EvaluateCondition(metric.Value, state.Value, state.Initialized)
 
 		if shouldAlert {
 			// Check if we recently alerted on this rule to avoid spam
@@ -186,10 +189,12 @@ func (m *Manager) CheckMetric(metric types.Metric) error {
 			m.queueAlert(rule, metric)
 		}
 
-		// Update previousValue and mark as initialized
+		// Update metric state
 		m.metricMutex.Lock()
-		m.lastMetrics[rule.ID] = metric.Value
-		m.lastMetricsInitialized[rule.ID] = true
+		m.lastMetrics[rule.ID] = MetricState{
+			Value:       metric.Value,
+			Initialized: true,
+		}
 		m.metricMutex.Unlock()
 	}
 
